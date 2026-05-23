@@ -1,0 +1,27 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply min-h-screen antialiased;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply rounded-lg bg-accent px-4 py-2 font-medium text-white transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .btn-secondary {
+    @apply rounded-lg border border-slate-600 bg-slate-800 px-4 py-2 font-medium text-slate-100 transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .input-field {
+    @apply w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent;
+  }
+
+  .card {
+    @apply rounded-xl border border-slate-700/60 bg-slate-900/80 p-4 shadow-lg backdrop-blur;
+  }
+}
