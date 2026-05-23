@@ -1,6 +1,8 @@
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open, save } from "@tauri-apps/plugin-dialog";
+import { VIDEO_FILE_EXTENSIONS } from "@/utils/videoFiles";
 import type {
   ExportKind,
   ExportResult,
@@ -9,24 +11,41 @@ import type {
   YoutubeInfo,
 } from "@/types/media";
 
+export type NativeFileDropEvent = {
+  type: "enter" | "over" | "drop" | "leave";
+  paths: string[];
+};
+
+export async function onNativeFileDrop(
+  callback: (event: NativeFileDropEvent) => void,
+): Promise<UnlistenFn> {
+  const webview = getCurrentWebview();
+  return webview.onDragDropEvent((event) => {
+    const payload = event.payload;
+    switch (payload.type) {
+      case "enter":
+        callback({ type: "enter", paths: payload.paths });
+        break;
+      case "over":
+        callback({ type: "over", paths: [] });
+        break;
+      case "drop":
+        callback({ type: "drop", paths: payload.paths });
+        break;
+      case "leave":
+        callback({ type: "leave", paths: [] });
+        break;
+    }
+  });
+}
+
 export async function pickVideoFile(): Promise<string | null> {
   const selected = await open({
     multiple: false,
     filters: [
       {
         name: "Video",
-        extensions: [
-          "mp4",
-          "mkv",
-          "webm",
-          "avi",
-          "mov",
-          "flv",
-          "wmv",
-          "m4v",
-          "mpeg",
-          "mpg",
-        ],
+        extensions: [...VIDEO_FILE_EXTENSIONS],
       },
     ],
   });

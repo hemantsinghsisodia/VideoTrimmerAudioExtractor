@@ -1,29 +1,34 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { onMounted, onUnmounted, ref } from "vue";
 import { useMediaStore } from "@/stores/mediaStore";
+import { onNativeFileDrop } from "@/services/tauri";
+import { isSupportedVideoPath } from "@/utils/videoFiles";
+import type { UnlistenFn } from "@tauri-apps/api/event";
 
 const store = useMediaStore();
 const urlInput = ref("");
 const dragOver = ref(false);
 const showChangeSource = ref(false);
 
-function onDrop(e: DragEvent) {
-  dragOver.value = false;
-  e.preventDefault();
-  const file = e.dataTransfer?.files?.[0];
-  if (!file) return;
-  const path = (file as File & { path?: string }).path;
-  if (path) {
-    store.loadLocalFile(path);
-    showChangeSource.value = false;
-  } else {
-    store.error = "Drag & drop requires the desktop app. Use Browse instead.";
+let unlistenFileDrop: UnlistenFn | null = null;
+
+function handleDroppedPath(path: string) {
+  if (!isSupportedVideoPath(path)) {
+    store.error =
+      "Unsupported file type. Drop a video file (mp4, mkv, webm, mov, avi, etc.) or use Browse.";
+    return;
   }
+  void store.loadLocalFile(path);
+  showChangeSource.value = false;
 }
 
 function onDragOver(e: DragEvent) {
   e.preventDefault();
-  dragOver.value = true;
+}
+
+function onDrop(e: DragEvent) {
+  e.preventDefault();
+  dragOver.value = false;
 }
 
 function onDragLeave() {
@@ -43,6 +48,37 @@ function openChangeSource() {
 
 const loadedTitle = () =>
   store.probe?.title ?? store.youtubeInfo?.title ?? store.localPath ?? "Media loaded";
+
+onMounted(async () => {
+  try {
+    unlistenFileDrop = await onNativeFileDrop((event) => {
+      switch (event.type) {
+        case "enter":
+        case "over":
+          dragOver.value = true;
+          break;
+        case "leave":
+          dragOver.value = false;
+          break;
+        case "drop": {
+          dragOver.value = false;
+          const path = event.paths[0];
+          if (path) handleDroppedPath(path);
+          break;
+        }
+      }
+    });
+  } catch {
+    // Not running inside Tauri (e.g. Vite-only dev in browser).
+  }
+});
+
+onUnmounted(() => {
+  if (unlistenFileDrop) {
+    void unlistenFileDrop();
+    unlistenFileDrop = null;
+  }
+});
 </script>
 
 <template>
