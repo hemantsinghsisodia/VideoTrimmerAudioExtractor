@@ -1,5 +1,12 @@
+use crate::emit_progress_from;
+use crate::job_control::{wait_active_child, JobController, CANCELLED_BY_USER};
+use crate::progress::{parse_progress_line, PhaseProgress, ProgressKind};
+use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::mpsc;
+use std::thread;
+use tauri::{AppHandle, Manager};
 
 pub fn find_executable(name: &str) -> Option<PathBuf> {
     let candidates = if cfg!(windows) {
@@ -52,7 +59,166 @@ pub fn run_command_output(program: &Path, args: &[&str]) -> Result<String, Strin
     }
 }
 
-/// Run a long command (download/encode). Streams stderr to the terminal; no pipe deadlock.
+fn drain_pipe_to_string<R: std::io::Read + Send + 'static>(pipe: R) -> thread::JoinHandle<String> {
+    thread::spawn(move || {
+        let reader = BufReader::new(pipe);
+        reader
+            .lines()
+            .map_while(Result::ok)
+            .collect::<Vec<_>>()
+            .join("\n")
+    })
+}
+
+fn is_meaningless_stream(s: &str) -> bool {
+    let t = s.trim();
+    t.is_empty()
+        || t.eq_ignore_ascii_case("null")
+        || t == "{}"
+        || t == "[]"
+}
+
+fn format_command_failure(stderr: &str, stdout: &str, exit_code: Option<i32>) -> String {
+    let stderr_trimmed = stderr.trim();
+    if !is_meaningless_stream(stderr_trimmed) {
+        return format!("Command failed: {stderr_trimmed}");
+    }
+    let stdout_trimmed = stdout.trim();
+    if !is_meaningless_stream(stdout_trimmed) {
+        return format!("Command failed: {stdout_trimmed}");
+    }
+    match exit_code {
+        Some(code) => format!("Command failed with exit code {code}"),
+        None => "Command failed".into(),
+    }
+}
+
+/// Run a short command with cancellation support (used for metadata fetch).
+pub fn run_command_output_cancellable(
+    app: &AppHandle,
+    program: &Path,
+    args: &[&str],
+) -> Result<String, String> {
+    let jobs = app.state::<JobController>();
+
+    let mut child = Command::new(program)
+        .args(args)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("Failed to run {}: {e}", program.display()))?;
+
+    let stdout = child.stdout.take();
+    let stderr = child.stderr.take();
+
+    let stdout_handle = stdout.map(drain_pipe_to_string);
+    let stderr_handle = stderr.map(drain_pipe_to_string);
+
+    jobs.set_child(child);
+
+    let status = wait_active_child(&jobs)?;
+
+    if jobs.is_cancelled() {
+        return Err(CANCELLED_BY_USER.into());
+    }
+
+    let stdout_str = stdout_handle
+        .map(|h| h.join().unwrap_or_default())
+        .unwrap_or_default();
+    let stderr_str = stderr_handle
+        .map(|h| h.join().unwrap_or_default())
+        .unwrap_or_default();
+
+    if status.success() {
+        Ok(stdout_str)
+    } else {
+        Err(format_command_failure(
+            &stderr_str,
+            &stdout_str,
+            status.code(),
+        ))
+    }
+}
+
+/// Run a long command, parse stderr for progress, emit UI updates, return stdout.
+pub fn run_command_with_progress(
+    app: &AppHandle,
+    program: &Path,
+    args: &[&str],
+    kind: ProgressKind,
+    progress: &PhaseProgress<'_>,
+) -> Result<String, String> {
+    let jobs = app.state::<JobController>();
+
+    let mut child = Command::new(program)
+        .args(args)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("Failed to run {}: {e}", program.display()))?;
+
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or("Failed to capture stderr")?;
+    let stdout = child.stdout.take();
+
+    jobs.set_child(child);
+
+    let (tx_err, rx_err) = mpsc::channel();
+
+    let progress_app = progress.app.clone();
+    let progress_start = progress.start;
+    let progress_end = progress.end;
+
+    thread::spawn(move || {
+        let reader = BufReader::new(stderr);
+        for line in reader.lines().map_while(Result::ok) {
+            if let Some(parsed) = parse_progress_line(kind, &line) {
+                let f = parsed.fraction.clamp(0.0, 1.0);
+                let percent = progress_start + (progress_end - progress_start) * f;
+                emit_progress_from(&progress_app, percent, &parsed.message);
+            }
+        }
+        let _ = tx_err.send(());
+    });
+
+    let stdout_handle = stdout.map(|out| {
+        thread::spawn(move || {
+            let reader = BufReader::new(out);
+            reader
+                .lines()
+                .map_while(Result::ok)
+                .collect::<Vec<_>>()
+                .join("\n")
+        })
+    });
+
+    let status = wait_active_child(&jobs)?;
+
+    let _ = rx_err.recv();
+
+    if jobs.is_cancelled() {
+        return Err(CANCELLED_BY_USER.into());
+    }
+
+    let stdout_str = if let Some(handle) = stdout_handle {
+        handle.join().unwrap_or_default()
+    } else {
+        String::new()
+    };
+
+    if status.success() {
+        Ok(stdout_str)
+    } else {
+        Err(format!(
+            "Command failed with exit code {:?}",
+            status.code()
+        ))
+    }
+}
+
+/// Run a long command without capturing output (legacy fallback).
 pub fn run_command_long(program: &Path, args: &[&str]) -> Result<(), String> {
     let status = Command::new(program)
         .args(args)

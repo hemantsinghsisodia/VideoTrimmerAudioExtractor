@@ -8,6 +8,7 @@ import type {
   YoutubeInfo,
 } from "@/types/media";
 import {
+  cancelJob,
   checkDependencies,
   downloadYoutube,
   extractAudio,
@@ -23,6 +24,7 @@ import {
 import { validateTrimRange, formatTime, parseTimeInput } from "@/utils/time";
 import { validateYoutubeUrl } from "@/utils/youtube";
 import { getUserFacingFormats, pickDefaultFormatId } from "@/utils/formats";
+import { isCancelledError } from "@/utils/progress";
 
 export const useMediaStore = defineStore("media", () => {
   const sourceType = ref<SourceType | null>(null);
@@ -44,6 +46,7 @@ export const useMediaStore = defineStore("media", () => {
 
   const loading = ref(false);
   const exporting = ref(false);
+  const cancelling = ref(false);
   const error = ref<string | null>(null);
   const progress = ref<JobProgress | null>(null);
   const lastOutputPath = ref<string | null>(null);
@@ -85,11 +88,43 @@ export const useMediaStore = defineStore("media", () => {
     playbackKey.value += 1;
   }
 
+  function scheduleClearProgress() {
+    setTimeout(() => {
+      if (!exporting.value && !loading.value) {
+        progress.value = null;
+      }
+    }, 1500);
+  }
+
   async function init() {
     deps.value = await checkDependencies();
     await onJobProgress((p) => {
       progress.value = p;
     });
+  }
+
+  async function cancelCurrentJob() {
+    if (!loading.value && !exporting.value) return;
+    cancelling.value = true;
+    error.value = null;
+    try {
+      await cancelJob();
+    } finally {
+      cancelling.value = false;
+    }
+  }
+
+  function handleJobError(e: unknown) {
+    if (isCancelledError(e)) {
+      error.value = null;
+      progress.value = {
+        job_id: "default",
+        percent: 0,
+        message: "Cancelled",
+      };
+      return;
+    }
+    error.value = e instanceof Error ? e.message : String(e);
   }
 
   function reset() {
@@ -173,6 +208,7 @@ export const useMediaStore = defineStore("media", () => {
 
     loading.value = true;
     error.value = null;
+    progress.value = { job_id: "default", percent: 0, message: "Fetching video info…" };
     try {
       const info = await getYoutubeFormats(url);
       sourceType.value = "youtube";
@@ -192,9 +228,10 @@ export const useMediaStore = defineStore("media", () => {
       selectedFormatId.value = pickDefaultFormatId(info.formats);
       downloadedPath.value = null;
     } catch (e) {
-      error.value = e instanceof Error ? e.message : String(e);
+      handleJobError(e);
     } finally {
       loading.value = false;
+      if (!exporting.value) scheduleClearProgress();
     }
   }
 
@@ -206,7 +243,7 @@ export const useMediaStore = defineStore("media", () => {
 
     exporting.value = true;
     error.value = null;
-    progress.value = null;
+    progress.value = { job_id: "default", percent: 0, message: "Preparing trim…" };
     try {
       const result = await trimVideo(
         localPath.value,
@@ -218,9 +255,10 @@ export const useMediaStore = defineStore("media", () => {
       lastOutputPath.value = result.output_path;
       await setPlaybackFromFile(result.output_path);
     } catch (e) {
-      error.value = e instanceof Error ? e.message : String(e);
+      handleJobError(e);
     } finally {
       exporting.value = false;
+      scheduleClearProgress();
     }
   }
 
@@ -232,7 +270,7 @@ export const useMediaStore = defineStore("media", () => {
 
     exporting.value = true;
     error.value = null;
-    progress.value = null;
+    progress.value = { job_id: "default", percent: 0, message: "Preparing audio export…" };
     try {
       const result = await extractAudio(
         localPath.value,
@@ -242,9 +280,10 @@ export const useMediaStore = defineStore("media", () => {
       );
       lastOutputPath.value = result.output_path;
     } catch (e) {
-      error.value = e instanceof Error ? e.message : String(e);
+      handleJobError(e);
     } finally {
       exporting.value = false;
+      scheduleClearProgress();
     }
   }
 
@@ -260,7 +299,7 @@ export const useMediaStore = defineStore("media", () => {
 
     exporting.value = true;
     error.value = null;
-    progress.value = null;
+    progress.value = { job_id: "default", percent: 0, message: "Preparing download…" };
     try {
       const result = await downloadYoutube({
         url: youtubeUrl.value,
@@ -276,9 +315,10 @@ export const useMediaStore = defineStore("media", () => {
         await setPlaybackFromFile(result.output_path);
       }
     } catch (e) {
-      error.value = e instanceof Error ? e.message : String(e);
+      handleJobError(e);
     } finally {
       exporting.value = false;
+      scheduleClearProgress();
     }
   }
 
@@ -302,6 +342,7 @@ export const useMediaStore = defineStore("media", () => {
     formatFilter,
     loading,
     exporting,
+    cancelling,
     error,
     progress,
     lastOutputPath,
@@ -322,5 +363,6 @@ export const useMediaStore = defineStore("media", () => {
     exportLocalTrimmed,
     exportLocalAudio,
     exportYoutube,
+    cancelCurrentJob,
   };
 });

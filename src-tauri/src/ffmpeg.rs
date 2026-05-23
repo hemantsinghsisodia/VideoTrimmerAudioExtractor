@@ -1,6 +1,10 @@
 use crate::models::MediaProbe;
-use crate::process_util::{find_executable, format_secs, run_command_long, run_command_output};
+use crate::process_util::{
+    find_executable, format_secs, run_command_output, run_command_with_progress,
+};
+use crate::progress::{PhaseProgress, ProgressKind};
 use std::path::{Path, PathBuf};
+use tauri::AppHandle;
 
 pub fn ffmpeg_path() -> Option<PathBuf> {
     find_executable("ffmpeg")
@@ -64,6 +68,8 @@ pub fn probe_file(path: &str) -> Result<MediaProbe, String> {
 }
 
 pub fn trim_video(
+    app: &AppHandle,
+    progress: &PhaseProgress<'_>,
     input: &str,
     output: &str,
     start_secs: f64,
@@ -74,8 +80,13 @@ pub fn trim_video(
     let duration = (end_secs - start_secs).max(0.1);
     let start = format_secs(start_secs);
 
+    progress.emit_fraction(0.0, "Starting trim…");
+
     let mut args: Vec<String> = vec![
         "-y".into(),
+        "-hide_banner".into(),
+        "-loglevel".into(),
+        "info".into(),
         "-ss".into(),
         start,
         "-i".into(),
@@ -100,28 +111,54 @@ pub fn trim_video(
             "+faststart".into(),
         ]);
     } else {
-        args.extend(["-c".into(), "copy".into(), "-avoid_negative_ts".into(), "make_zero".into()]);
+        args.extend([
+            "-c".into(),
+            "copy".into(),
+            "-avoid_negative_ts".into(),
+            "make_zero".into(),
+        ]);
     }
 
     args.push(output.into());
 
     let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
-    run_command_long(&ffmpeg, &arg_refs)?;
+    run_command_with_progress(
+        app,
+        &ffmpeg,
+        &arg_refs,
+        ProgressKind::Ffmpeg { duration_secs: duration },
+        progress,
+    )?;
 
     if !reencode && output.ends_with(".mp4") {
-        let _ = optimize_for_player(&ffmpeg, output);
+        progress.emit_fraction(0.95, "Optimizing for playback…");
+        let _ = optimize_for_player(app, progress, &ffmpeg, output);
     }
 
+    progress.emit_fraction(1.0, "Trim complete");
     Ok(())
 }
 
-/// Move MP4 metadata to the start so HTML5 video can play before full download.
-fn optimize_for_player(ffmpeg: &Path, output: &str) -> Result<(), String> {
+fn optimize_for_player(
+    app: &AppHandle,
+    progress: &PhaseProgress<'_>,
+    ffmpeg: &Path,
+    output: &str,
+) -> Result<(), String> {
     let temp = format!("{output}.faststart.mp4");
-    let status = run_command_long(
+    let phase = PhaseProgress {
+        app,
+        start: progress.start,
+        end: progress.end,
+    };
+    let _ = run_command_with_progress(
+        app,
         ffmpeg,
         &[
             "-y",
+            "-hide_banner",
+            "-loglevel",
+            "info",
             "-i",
             output,
             "-c",
@@ -130,8 +167,12 @@ fn optimize_for_player(ffmpeg: &Path, output: &str) -> Result<(), String> {
             "+faststart",
             &temp,
         ],
+        ProgressKind::Ffmpeg {
+            duration_secs: 1.0,
+        },
+        &phase,
     );
-    if status.is_ok() && Path::new(&temp).exists() {
+    if Path::new(&temp).exists() {
         std::fs::remove_file(output).ok();
         std::fs::rename(&temp, output).map_err(|e| e.to_string())?;
     }
@@ -139,6 +180,8 @@ fn optimize_for_player(ffmpeg: &Path, output: &str) -> Result<(), String> {
 }
 
 pub fn extract_audio(
+    app: &AppHandle,
+    progress: &PhaseProgress<'_>,
     input: &str,
     output: &str,
     start_secs: f64,
@@ -147,6 +190,8 @@ pub fn extract_audio(
     let ffmpeg = ffmpeg_path().ok_or("ffmpeg not found on PATH")?;
     let duration = (end_secs - start_secs).max(0.1);
     let start = format_secs(start_secs);
+
+    progress.emit_fraction(0.0, "Extracting audio…");
 
     let ext = Path::new(output)
         .extension()
@@ -163,6 +208,9 @@ pub fn extract_audio(
     let duration_str = format!("{duration:.3}");
     let mut args = vec![
         "-y",
+        "-hide_banner",
+        "-loglevel",
+        "info",
         "-ss",
         &start,
         "-i",
@@ -178,6 +226,14 @@ pub fn extract_audio(
     }
     args.push(output);
 
-    run_command_long(&ffmpeg, &args)?;
+    run_command_with_progress(
+        app,
+        &ffmpeg,
+        &args,
+        ProgressKind::Ffmpeg { duration_secs: duration },
+        progress,
+    )?;
+
+    progress.emit_fraction(1.0, "Audio extraction complete");
     Ok(())
 }

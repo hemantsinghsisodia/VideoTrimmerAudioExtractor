@@ -120,6 +120,10 @@ export function onJobProgress(callback: (progress: JobProgress) => void): Promis
   });
 }
 
+export async function cancelJob(): Promise<boolean> {
+  return invoke<boolean>("cancel_job");
+}
+
 export function videoSrcFromPath(path: string): string {
   return convertFileSrc(path, "asset");
 }

@@ -1,25 +1,30 @@
 mod ffmpeg;
+mod job_control;
 mod models;
 mod playback;
 mod process_util;
+mod progress;
 mod ytdlp;
 
+use job_control::JobController;
 use models::{DependencyStatus, ExportResult, JobProgress, MediaProbe, YoutubeInfo};
-use tauri::{AppHandle, Emitter};
-
-fn emit_progress(app: &AppHandle, percent: f64, message: &str) {
-    emit_progress_from(app, percent, message);
-}
+use progress::PhaseProgress;
+use tauri::{AppHandle, Emitter, Manager};
 
 pub(crate) fn emit_progress_from(app: &AppHandle, percent: f64, message: &str) {
     let _ = app.emit(
         "job-progress",
         JobProgress {
             job_id: "default".into(),
-            percent,
+            percent: percent.clamp(0.0, 100.0),
             message: message.into(),
         },
     );
+}
+
+#[tauri::command]
+fn cancel_job(jobs: tauri::State<'_, JobController>) -> bool {
+    jobs.cancel()
 }
 
 #[tauri::command]
@@ -53,15 +58,25 @@ async fn probe_local_file(path: String) -> Result<MediaProbe, String> {
 }
 
 #[tauri::command]
-async fn get_youtube_formats(url: String) -> Result<YoutubeInfo, String> {
-    tauri::async_runtime::spawn_blocking(move || ytdlp::fetch_formats(&url))
-        .await
-        .map_err(|e| format!("Task failed: {e}"))?
+async fn get_youtube_formats(app: AppHandle, url: String) -> Result<YoutubeInfo, String> {
+    let app2 = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        app2.state::<JobController>().begin_job();
+        emit_progress_from(&app2, 5.0, "Fetching video info…");
+        let info = ytdlp::fetch_formats(&app2, &url)?;
+        emit_progress_from(&app2, 100.0, "Ready");
+        Ok(info)
+    })
+    .await
+    .map_err(|e| format!("Task failed: {e}"))?
 }
 
 #[tauri::command]
 fn stage_for_playback(app: AppHandle, source_path: String) -> Result<String, String> {
-    playback::stage_for_playback(&app, &source_path)
+    emit_progress_from(&app, 96.0, "Preparing preview…");
+    let path = playback::stage_for_playback(&app, &source_path)?;
+    emit_progress_from(&app, 100.0, "Ready");
+    Ok(path)
 }
 
 #[tauri::command]
@@ -82,9 +97,21 @@ async fn trim_video(
 ) -> Result<ExportResult, String> {
     let app2 = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        emit_progress(&app2, 10.0, "Starting trim...");
-        ffmpeg::trim_video(&input_path, &output_path, start_secs, end_secs, reencode)?;
-        emit_progress(&app2, 100.0, "Trim complete");
+        app2.state::<JobController>().begin_job();
+        let phase = PhaseProgress {
+            app: &app2,
+            start: 5.0,
+            end: 95.0,
+        };
+        ffmpeg::trim_video(
+            &app2,
+            &phase,
+            &input_path,
+            &output_path,
+            start_secs,
+            end_secs,
+            reencode,
+        )?;
         Ok(ExportResult {
             output_path,
             kind: "trimmed_video".into(),
@@ -104,9 +131,20 @@ async fn extract_audio(
 ) -> Result<ExportResult, String> {
     let app2 = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        emit_progress(&app2, 10.0, "Extracting audio...");
-        ffmpeg::extract_audio(&input_path, &output_path, start_secs, end_secs)?;
-        emit_progress(&app2, 100.0, "Audio extraction complete");
+        app2.state::<JobController>().begin_job();
+        let phase = PhaseProgress {
+            app: &app2,
+            start: 5.0,
+            end: 95.0,
+        };
+        ffmpeg::extract_audio(
+            &app2,
+            &phase,
+            &input_path,
+            &output_path,
+            start_secs,
+            end_secs,
+        )?;
         Ok(ExportResult {
             output_path,
             kind: "audio_only".into(),
@@ -129,7 +167,8 @@ async fn download_youtube(
 ) -> Result<ExportResult, String> {
     let app2 = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        emit_progress(&app2, 5.0, "Downloading from YouTube...");
+        app2.state::<JobController>().begin_job();
+        emit_progress_from(&app2, 2.0, "Preparing download…");
         let path = ytdlp::download_with_format(
             &app2,
             &url,
@@ -140,7 +179,7 @@ async fn download_youtube(
             video_only,
             audio_only,
         )?;
-        emit_progress(&app2, 100.0, "Download complete");
+        emit_progress_from(&app2, 100.0, "Complete");
         Ok(ExportResult {
             output_path: path,
             kind: "youtube_format".into(),
@@ -153,10 +192,12 @@ async fn download_youtube(
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .manage(JobController::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .invoke_handler(tauri::generate_handler![
             check_dependencies,
+            cancel_job,
             probe_local_file,
             stage_for_playback,
             get_youtube_formats,

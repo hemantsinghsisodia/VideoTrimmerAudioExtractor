@@ -1,6 +1,9 @@
 use crate::ffmpeg;
 use crate::models::{YoutubeFormat, YoutubeInfo};
-use crate::process_util::{find_executable, run_command, run_command_long, run_command_output};
+use crate::process_util::{
+    find_executable, run_command_output, run_command_output_cancellable, run_command_with_progress,
+};
+use crate::progress::{PhaseProgress, ProgressKind};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -10,13 +13,20 @@ pub fn ytdlp_path() -> Option<PathBuf> {
     find_executable("yt-dlp").or_else(|| find_executable("ytdlp"))
 }
 
-pub fn fetch_formats(url: &str) -> Result<YoutubeInfo, String> {
+pub fn fetch_formats(app: &AppHandle, url: &str) -> Result<YoutubeInfo, String> {
     let ytdlp = ytdlp_path().ok_or("yt-dlp not found on PATH")?;
-    let output = run_command(
+    let output = run_command_output_cancellable(
+        app,
         &ytdlp,
         &["--dump-single-json", "--no-playlist", "--no-warnings", url],
-        None,
     )?;
+
+    let trimmed = output.trim();
+    if trimmed.is_empty() || trimmed.eq_ignore_ascii_case("null") {
+        return Err(
+            "yt-dlp returned no video data. The URL may be invalid or the video unavailable.".into(),
+        );
+    }
 
     parse_youtube_json(&output)
 }
@@ -67,14 +77,20 @@ pub fn download_with_format(
 
     let format_spec = build_format_spec(format_id, video_only, audio_only);
 
-    crate::emit_progress_from(app, 15.0, "Downloading from YouTube (see terminal for progress)...");
+    let download_phase = PhaseProgress {
+        app,
+        start: 5.0,
+        end: 65.0,
+    };
+    download_phase.emit_fraction(0.0, "Starting YouTube download…");
 
     let mut args: Vec<String> = vec![
         "-f".into(),
         format_spec,
         "--no-playlist".into(),
         "--no-warnings".into(),
-        "--no-progress".into(),
+        "--newline".into(),
+        "--progress".into(),
         "-o".into(),
         template_str.clone(),
         url.into(),
@@ -85,25 +101,30 @@ pub fn download_with_format(
         args.push("mp4".into());
     }
 
-    // Prefer a reliable final path from yt-dlp when supported
     args.push("--print".into());
     args.push("after_move:filepath".into());
 
     let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
 
-    let downloaded_path = match run_command_output(&ytdlp, &arg_refs) {
+    let downloaded_path = match run_command_with_progress(
+        app,
+        &ytdlp,
+        &arg_refs,
+        ProgressKind::YtDlp,
+        &download_phase,
+    ) {
         Ok(stdout) => resolve_downloaded_path(&stdout, &temp_dir, stamp)?,
+        Err(e) if e.contains("Cancelled") => return Err(e),
         Err(_) => {
-            // Fallback: run without --print (older yt-dlp) and locate newest file
             args.pop();
             args.pop();
             let arg_refs2: Vec<&str> = args.iter().map(String::as_str).collect();
-            run_command_long(&ytdlp, &arg_refs2)?;
+            run_command_with_progress(app, &ytdlp, &arg_refs2, ProgressKind::YtDlp, &download_phase)?;
             find_newest_in_dir(&temp_dir, stamp)?
         }
     };
 
-    crate::emit_progress_from(app, 55.0, "Download finished, processing trim...");
+    download_phase.emit_fraction(1.0, "Download finished");
 
     if !Path::new(&downloaded_path).exists() {
         return Err(format!(
@@ -121,22 +142,32 @@ pub fn download_with_format(
 
     if needs_trim {
         let (s, e) = (start_secs.unwrap(), end_secs.unwrap());
-        crate::emit_progress_from(app, 70.0, "Trimming with FFmpeg...");
+        let trim_phase = PhaseProgress {
+            app,
+            start: 68.0,
+            end: 92.0,
+        };
 
         if audio_only {
-            ffmpeg::extract_audio(&downloaded_path, &final_output, s, e)?;
-        } else {
-            // Try fast stream copy first, then re-encode if needed
-            if ffmpeg::trim_video(&downloaded_path, &final_output, s, e, false).is_err() {
-                ffmpeg::trim_video(&downloaded_path, &final_output, s, e, true)?;
-            }
+            ffmpeg::extract_audio(app, &trim_phase, &downloaded_path, &final_output, s, e)?;
+        } else if ffmpeg::trim_video(app, &trim_phase, &downloaded_path, &final_output, s, e, false)
+            .is_err()
+        {
+            ffmpeg::trim_video(app, &trim_phase, &downloaded_path, &final_output, s, e, true)?;
         }
         let _ = fs::remove_file(&downloaded_path);
     } else {
+        let save_phase = PhaseProgress {
+            app,
+            start: 85.0,
+            end: 95.0,
+        };
+        save_phase.emit_fraction(0.0, "Saving file…");
         move_to_output(&downloaded_path, &final_output)?;
+        save_phase.emit_fraction(1.0, "Save complete");
     }
 
-    crate::emit_progress_from(app, 95.0, "Verifying output...");
+    crate::emit_progress_from(app, 98.0, "Verifying output…");
     if !Path::new(&final_output).exists() {
         return Err("Export finished but output file is missing".into());
     }
@@ -223,6 +254,10 @@ fn move_to_output(from: &str, to: &str) -> Result<(), String> {
 fn parse_youtube_json(json_str: &str) -> Result<YoutubeInfo, String> {
     let json: serde_json::Value =
         serde_json::from_str(json_str).map_err(|e| format!("Invalid yt-dlp JSON: {e}"))?;
+
+    if json.is_null() {
+        return Err("yt-dlp returned no video data.".into());
+    }
 
     let id = json["id"].as_str().unwrap_or("unknown").to_string();
     let title = json["title"].as_str().unwrap_or("Untitled").to_string();

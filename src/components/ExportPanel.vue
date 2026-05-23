@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useMediaStore } from "@/stores/mediaStore";
+import ProgressBar from "@/components/ProgressBar.vue";
 
 const store = useMediaStore();
 </script>
@@ -8,15 +9,7 @@ const store = useMediaStore();
   <div class="space-y-2">
     <h2 class="text-sm font-semibold">Export</h2>
 
-    <div v-if="store.progress" class="space-y-1">
-      <div class="h-1.5 overflow-hidden rounded-full bg-slate-700">
-        <div
-          class="h-full bg-accent transition-all"
-          :style="{ width: `${store.progress.percent}%` }"
-        />
-      </div>
-      <p class="line-clamp-2 text-[10px] text-slate-400">{{ store.progress.message }}</p>
-    </div>
+    <ProgressBar v-if="store.exporting && store.progress" />
 
     <template v-if="store.isLocal">
       <button
@@ -24,14 +17,14 @@ const store = useMediaStore();
         :disabled="!store.trimValidation.valid || store.exporting"
         @click="store.exportLocalTrimmed()"
       >
-        Trimmed video
+        {{ store.exporting ? "Processing…" : "Trimmed video" }}
       </button>
       <button
         class="btn-secondary w-full py-1.5 text-sm"
         :disabled="!store.trimValidation.valid || store.exporting"
         @click="store.exportLocalAudio()"
       >
-        Audio only
+        {{ store.exporting ? "Processing…" : "Audio only" }}
       </button>
     </template>
 
@@ -40,6 +33,7 @@ const store = useMediaStore();
         <button
           class="rounded px-2 py-0.5"
           :class="store.formatFilter === 'all' ? 'bg-accent text-white' : 'bg-slate-700'"
+          :disabled="store.exporting"
           @click="store.formatFilter = 'all'"
         >
           Recommended
@@ -47,6 +41,7 @@ const store = useMediaStore();
         <button
           class="rounded px-2 py-0.5"
           :class="store.formatFilter === 'video' ? 'bg-accent text-white' : 'bg-slate-700'"
+          :disabled="store.exporting"
           @click="store.formatFilter = 'video'"
         >
           Video
@@ -54,13 +49,18 @@ const store = useMediaStore();
         <button
           class="rounded px-2 py-0.5"
           :class="store.formatFilter === 'audio' ? 'bg-accent text-white' : 'bg-slate-700'"
+          :disabled="store.exporting"
           @click="store.formatFilter = 'audio'"
         >
           Audio
         </button>
       </div>
 
-      <select v-model="store.selectedFormatId" class="input-field py-1 text-xs">
+      <select
+        v-model="store.selectedFormatId"
+        class="input-field py-1 text-xs"
+        :disabled="store.exporting"
+      >
         <option v-for="f in store.availableFormats" :key="f.format_id" :value="f.format_id">
           {{ f.label }}
         </option>
@@ -73,7 +73,7 @@ const store = useMediaStore();
         "
         @click="store.exportYoutube()"
       >
-        {{ store.exporting ? "Downloading…" : "Download (trimmed)" }}
+        {{ store.exporting ? "Processing…" : "Download (trimmed)" }}
       </button>
     </template>
   </div>

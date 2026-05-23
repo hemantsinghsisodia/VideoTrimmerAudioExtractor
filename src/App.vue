@@ -70,20 +70,34 @@ onMounted(() => {
       v-if="store.exporting || store.loading"
       class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
     >
-      <div class="card max-w-sm space-y-2 p-4 text-center">
+      <div class="card w-full max-w-sm space-y-3 p-4 text-center">
         <p class="text-sm font-medium text-white">
-          {{ store.exporting ? "Export in progress…" : "Loading…" }}
+          {{ store.exporting ? "Working…" : "Loading…" }}
         </p>
-        <p class="text-xs text-slate-400">This may take a minute for long videos.</p>
-        <div v-if="store.progress" class="space-y-1">
-          <div class="h-1.5 overflow-hidden rounded-full bg-slate-700">
-            <div
-              class="h-full bg-accent transition-all"
-              :style="{ width: `${store.progress.percent}%` }"
-            />
-          </div>
-          <p class="text-xs text-slate-400">{{ store.progress.message }}</p>
+        <p
+          v-if="store.progress"
+          class="text-3xl font-bold tabular-nums text-accent"
+        >
+          {{ Math.round(store.progress.percent) }}%
+        </p>
+        <p v-if="store.progress" class="text-xs text-slate-300">
+          {{ store.progress.message }}
+        </p>
+        <p v-else class="text-xs text-slate-400">Please wait…</p>
+        <div v-if="store.progress" class="h-2 overflow-hidden rounded-full bg-slate-700">
+          <div
+            class="h-full bg-accent transition-[width] duration-200 ease-out"
+            :style="{ width: `${store.progress.percent}%` }"
+          />
         </div>
+        <button
+          type="button"
+          class="btn-secondary w-full py-1.5 text-sm"
+          :disabled="store.cancelling"
+          @click="store.cancelCurrentJob()"
+        >
+          {{ store.cancelling ? "Cancelling…" : "Cancel" }}
+        </button>
       </div>
     </div>
   </div>
