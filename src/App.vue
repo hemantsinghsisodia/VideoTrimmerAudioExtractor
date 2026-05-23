@@ -16,63 +16,67 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="mx-auto flex min-h-screen max-w-6xl flex-col gap-6 p-6">
-    <header class="space-y-1">
-      <h1 class="text-2xl font-bold tracking-tight text-white">
+  <div class="flex h-screen max-h-screen min-h-0 flex-col overflow-hidden p-3 gap-2">
+    <header class="shrink-0 space-y-0.5">
+      <h1 class="text-lg font-bold tracking-tight text-white">
         Video Trimmer &amp; Audio Extractor
       </h1>
-      <p class="text-sm text-slate-400">
-        Paste a YouTube URL, drag &amp; drop, or pick a local video. Trim on the timeline and export.
+      <p class="text-xs text-slate-400">
+        Paste a YouTube URL, drag &amp; drop, or pick a local video. Trim and export.
       </p>
     </header>
 
-    <DependencyBanner />
+    <DependencyBanner class="shrink-0" />
 
-    <SourcePanel />
+    <SourcePanel class="shrink-0" />
 
     <template v-if="store.hasSource">
-      <div class="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <section class="card min-w-0 space-y-4">
-          <VideoPlayer />
-          <TrimTimeline />
-          <TrimInputs />
+      <div
+        class="grid min-h-0 min-w-0 flex-1 gap-2 overflow-hidden lg:grid-cols-[minmax(0,1fr)_260px]"
+      >
+        <section class="card flex min-h-0 min-w-0 flex-col gap-2 overflow-hidden p-3">
+          <VideoPlayer class="shrink-0" />
+          <TrimTimeline class="shrink-0" />
+          <TrimInputs class="shrink-0" />
         </section>
-        <aside class="card">
-          <ExportPanel />
+        <aside class="card flex min-h-0 min-w-0 flex-col overflow-hidden p-3">
+          <ExportPanel class="min-h-0 overflow-y-auto overflow-x-hidden" />
         </aside>
       </div>
     </template>
 
-    <p
-      v-if="store.error"
-      class="break-words rounded-lg border border-red-500/40 bg-red-950/40 px-4 py-2 text-sm text-red-300"
-    >
-      {{ store.error }}
-    </p>
+    <div v-else class="min-h-0 flex-1" />
 
-    <p
-      v-if="store.lastOutputPath"
-      class="break-all rounded-lg border border-emerald-500/40 bg-emerald-950/40 px-4 py-2 text-sm text-emerald-300"
-    >
-      Saved to: {{ store.lastOutputPath }}
-      <span v-if="store.downloadedPath" class="block text-xs text-emerald-400/80">
-        Playing from app cache (staged copy for preview).
-      </span>
-    </p>
+    <div v-if="store.error || store.lastOutputPath" class="shrink-0 space-y-1">
+      <p
+        v-if="store.error"
+        class="line-clamp-2 break-words rounded border border-red-500/40 bg-red-950/40 px-2 py-1 text-xs text-red-300"
+      >
+        {{ store.error }}
+      </p>
+      <p
+        v-if="store.lastOutputPath"
+        class="line-clamp-2 break-all rounded border border-emerald-500/40 bg-emerald-950/40 px-2 py-1 text-xs text-emerald-300"
+        :title="store.lastOutputPath"
+      >
+        Saved to: {{ store.lastOutputPath }}
+        <span v-if="store.downloadedPath" class="block text-emerald-400/80">
+          Playing from app cache.
+        </span>
+      </p>
+    </div>
 
     <div
       v-if="store.exporting || store.loading"
       class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
     >
-      <div class="card max-w-sm space-y-3 text-center">
-        <p class="font-medium text-white">
+      <div class="card max-w-sm space-y-2 p-4 text-center">
+        <p class="text-sm font-medium text-white">
           {{ store.exporting ? "Export in progress…" : "Loading…" }}
         </p>
-        <p class="text-sm text-slate-400">
-          The app stays responsive; this may take a minute for long videos.
-        </p>
+        <p class="text-xs text-slate-400">This may take a minute for long videos.</p>
         <div v-if="store.progress" class="space-y-1">
-          <div class="h-2 overflow-hidden rounded-full bg-slate-700">
+          <div class="h-1.5 overflow-hidden rounded-full bg-slate-700">
             <div
               class="h-full bg-accent transition-all"
               :style="{ width: `${store.progress.percent}%` }"

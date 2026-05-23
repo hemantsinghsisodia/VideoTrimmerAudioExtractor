@@ -80,32 +80,29 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="space-y-2">
-    <div class="flex justify-between text-xs text-slate-500">
+  <div class="space-y-1">
+    <div class="flex justify-between text-[10px] text-slate-500">
       <span>0:00</span>
       <span>{{ formatTime(duration) }}</span>
     </div>
     <div
       ref="trackRef"
-      class="relative h-10 cursor-pointer rounded-lg bg-slate-800"
+      class="relative h-8 cursor-pointer rounded-lg bg-slate-800"
       @click="onTrackClick"
     >
+      <div class="absolute inset-y-1.5 rounded bg-slate-700" style="left: 0; right: 0" />
       <div
-        class="absolute inset-y-2 rounded bg-slate-700"
-        style="left: 0; right: 0"
-      />
-      <div
-        class="absolute inset-y-2 rounded bg-accent/40"
+        class="absolute inset-y-1.5 rounded bg-accent/40"
         :style="{ left: `${startPercent}%`, width: `${endPercent - startPercent}%` }"
         @pointerdown="onRangePointerDown"
       />
       <div
-        class="absolute top-0 z-10 h-full w-3 -translate-x-1/2 cursor-ew-resize rounded bg-emerald-500 shadow"
+        class="absolute top-0 z-10 h-full w-2.5 -translate-x-1/2 cursor-ew-resize rounded bg-emerald-500 shadow"
         :style="{ left: `${startPercent}%` }"
         @pointerdown="onPointerDown('start', $event)"
       />
       <div
-        class="absolute top-0 z-10 h-full w-3 -translate-x-1/2 cursor-ew-resize rounded bg-rose-500 shadow"
+        class="absolute top-0 z-10 h-full w-2.5 -translate-x-1/2 cursor-ew-resize rounded bg-rose-500 shadow"
         :style="{ left: `${endPercent}%` }"
         @pointerdown="onPointerDown('end', $event)"
       />
@@ -114,8 +111,8 @@ onUnmounted(() => {
         :style="{ left: `${playheadPercent}%` }"
       />
     </div>
-    <p class="text-center text-xs text-slate-500">
-      Drag green (start) and red (end) handles, or click the track
+    <p class="text-center text-[10px] text-slate-500">
+      Drag handles or click track
     </p>
   </div>
 </template>

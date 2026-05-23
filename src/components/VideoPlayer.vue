@@ -12,6 +12,8 @@ const showYoutubeThumbnail = computed(
   () => store.isYoutube && !store.canPlayInPlayer && !!posterUrl.value,
 );
 
+const mediaHeightClass = "max-h-[clamp(180px,36vh,360px)]";
+
 watch(
   () => store.startSecs,
   (t) => {
@@ -47,20 +49,23 @@ function onLoadedMetadata() {
 
 function onVideoError() {
   loadError.value =
-    "Could not play this file in the built-in player. It may still be saved on disk — check the path below.";
+    "Could not play in the built-in player. Check the saved path below.";
 }
 </script>
 
 <template>
   <div class="min-w-0 overflow-hidden rounded-lg bg-black">
-    <div class="flex max-h-[min(60vh,480px)] w-full items-center justify-center bg-black">
+    <div
+      class="flex w-full items-center justify-center bg-black"
+      :class="mediaHeightClass"
+    >
       <video
         v-if="store.canPlayInPlayer"
         ref="videoRef"
         :key="store.playbackKey"
         :src="store.playbackSrc!"
         :poster="posterUrl"
-        class="max-h-[min(60vh,480px)] w-full object-contain"
+        :class="[mediaHeightClass, 'w-full object-contain']"
         controls
         preload="auto"
         @timeupdate="onTimeUpdate"
@@ -71,24 +76,24 @@ function onVideoError() {
         v-else-if="showYoutubeThumbnail || posterUrl"
         :src="posterUrl"
         alt="Video thumbnail"
-        class="max-h-[min(60vh,480px)] w-full object-contain"
+        :class="[mediaHeightClass, 'w-full object-contain']"
       />
       <div
         v-else
-        class="flex aspect-video w-full max-w-full items-center justify-center text-sm text-slate-500"
+        class="flex h-[180px] w-full items-center justify-center text-xs text-slate-500"
       >
         Preview unavailable
       </div>
     </div>
 
-    <p v-if="loadError" class="mt-2 break-words text-xs text-red-400">
+    <p v-if="loadError" class="mt-1 line-clamp-2 text-xs text-red-400">
       {{ loadError }}
     </p>
     <p
       v-else-if="store.isYoutube && !store.canPlayInPlayer"
-      class="mt-2 break-words text-xs text-slate-500"
+      class="mt-1 line-clamp-2 text-xs text-slate-500"
     >
-      Thumbnail preview only. Trim on the timeline, then download to play the exported video here.
+      Thumbnail only. Download to preview the trimmed video here.
     </p>
   </div>
 </template>

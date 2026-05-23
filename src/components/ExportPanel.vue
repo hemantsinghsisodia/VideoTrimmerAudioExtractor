@@ -5,57 +5,54 @@ const store = useMediaStore();
 </script>
 
 <template>
-  <div class="space-y-4">
-    <h2 class="text-lg font-semibold">Export</h2>
+  <div class="space-y-2">
+    <h2 class="text-sm font-semibold">Export</h2>
 
     <div v-if="store.progress" class="space-y-1">
-      <div class="h-2 overflow-hidden rounded-full bg-slate-700">
+      <div class="h-1.5 overflow-hidden rounded-full bg-slate-700">
         <div
           class="h-full bg-accent transition-all"
           :style="{ width: `${store.progress.percent}%` }"
         />
       </div>
-      <p class="text-xs text-slate-400">{{ store.progress.message }}</p>
+      <p class="line-clamp-2 text-[10px] text-slate-400">{{ store.progress.message }}</p>
     </div>
 
     <template v-if="store.isLocal">
-      <p class="text-sm text-slate-400">Local file exports</p>
       <button
-        class="btn-primary w-full"
+        class="btn-primary w-full py-1.5 text-sm"
         :disabled="!store.trimValidation.valid || store.exporting"
         @click="store.exportLocalTrimmed()"
       >
-        Download trimmed video
+        Trimmed video
       </button>
       <button
-        class="btn-secondary w-full"
+        class="btn-secondary w-full py-1.5 text-sm"
         :disabled="!store.trimValidation.valid || store.exporting"
         @click="store.exportLocalAudio()"
       >
-        Download audio only (best quality)
+        Audio only
       </button>
     </template>
 
     <template v-else-if="store.isYoutube">
-      <p class="text-sm text-slate-400">YouTube format &amp; quality</p>
-
-      <div class="flex gap-2 text-xs">
+      <div class="flex flex-wrap gap-1 text-[10px]">
         <button
-          class="rounded px-2 py-1"
+          class="rounded px-2 py-0.5"
           :class="store.formatFilter === 'all' ? 'bg-accent text-white' : 'bg-slate-700'"
           @click="store.formatFilter = 'all'"
         >
           Recommended
         </button>
         <button
-          class="rounded px-2 py-1"
+          class="rounded px-2 py-0.5"
           :class="store.formatFilter === 'video' ? 'bg-accent text-white' : 'bg-slate-700'"
           @click="store.formatFilter = 'video'"
         >
           Video
         </button>
         <button
-          class="rounded px-2 py-1"
+          class="rounded px-2 py-0.5"
           :class="store.formatFilter === 'audio' ? 'bg-accent text-white' : 'bg-slate-700'"
           @click="store.formatFilter = 'audio'"
         >
@@ -63,23 +60,20 @@ const store = useMediaStore();
         </button>
       </div>
 
-      <p class="text-xs text-slate-500">
-        Pick a quality below. Combined MP4 options download fastest; video-only may take longer.
-      </p>
-      <select v-model="store.selectedFormatId" class="input-field max-h-48 text-xs">
+      <select v-model="store.selectedFormatId" class="input-field py-1 text-xs">
         <option v-for="f in store.availableFormats" :key="f.format_id" :value="f.format_id">
           {{ f.label }}
         </option>
       </select>
 
       <button
-        class="btn-primary w-full"
+        class="btn-primary w-full py-1.5 text-sm"
         :disabled="
           !store.trimValidation.valid || store.exporting || !store.selectedFormatId
         "
         @click="store.exportYoutube()"
       >
-        {{ store.exporting ? "Downloading…" : "Download selected format (trimmed)" }}
+        {{ store.exporting ? "Downloading…" : "Download (trimmed)" }}
       </button>
     </template>
   </div>

@@ -85,11 +85,9 @@ export const useMediaStore = defineStore("media", () => {
     playbackKey.value += 1;
   }
 
-  let unlistenProgress: (() => void) | null = null;
-
   async function init() {
     deps.value = await checkDependencies();
-    unlistenProgress = await onJobProgress((p) => {
+    await onJobProgress((p) => {
       progress.value = p;
     });
   }
@@ -139,11 +137,6 @@ export const useMediaStore = defineStore("media", () => {
     startSecs.value = start;
     endSecs.value = end;
     syncInputsFromSecs();
-  }
-
-  function setPlayhead(seconds: number) {
-    // used by timeline for preview seek only
-    void seconds;
   }
 
   async function loadLocalFile(path?: string) {

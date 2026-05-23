@@ -3,8 +3,10 @@
 @tailwind utilities;
 
 @layer base {
-  body {
-    @apply min-h-screen antialiased;
+  html,
+  body,
+  #app {
+    @apply h-full overflow-hidden antialiased;
   }
 }
 
