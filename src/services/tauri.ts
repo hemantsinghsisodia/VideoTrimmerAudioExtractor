@@ -4,6 +4,7 @@ import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { VIDEO_FILE_EXTENSIONS } from "@/utils/videoFiles";
 import type {
+  AudioConvertTarget,
   ExportKind,
   ExportResult,
   JobProgress,
@@ -110,6 +111,8 @@ export interface YoutubeDownloadParams {
   endSecs?: number;
   videoOnly: boolean;
   audioOnly: boolean;
+  convertTo?: AudioConvertTarget;
+  audioQuality?: string;
 }
 
 export async function downloadYoutube(params: YoutubeDownloadParams): Promise<ExportResult> {
@@ -121,6 +124,8 @@ export async function downloadYoutube(params: YoutubeDownloadParams): Promise<Ex
     endSecs: params.endSecs,
     videoOnly: params.videoOnly,
     audioOnly: params.audioOnly,
+    convertTo: params.convertTo ?? null,
+    audioQuality: params.audioQuality ?? null,
   });
 }
 

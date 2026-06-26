@@ -23,7 +23,7 @@ import {
 } from "@/services/tauri";
 import { validateTrimRange, formatTime, parseTimeInput } from "@/utils/time";
 import { validateYoutubeUrl } from "@/utils/youtube";
-import { getUserFacingFormats, pickDefaultFormatId } from "@/utils/formats";
+import { getUserFacingFormats, pickDefaultFormatId, resolveYoutubeDownloadFormat } from "@/utils/formats";
 import { isCancelledError } from "@/utils/progress";
 
 export const useMediaStore = defineStore("media", () => {
@@ -292,8 +292,10 @@ export const useMediaStore = defineStore("media", () => {
     const selected = availableFormats.value.find(
       (f) => f.format_id === selectedFormatId.value,
     );
-    const ext = selected?.audio_only ? (selected.ext ?? "m4a") : "mp4";
-    const defaultName = `youtube_${Date.now()}.${ext}`;
+    if (!selected) return;
+
+    const download = resolveYoutubeDownloadFormat(selected);
+    const defaultName = `youtube_${Date.now()}.${download.defaultExtension}`;
     const outputPath = await pickSavePath(defaultName);
     if (!outputPath) return;
 
@@ -303,15 +305,17 @@ export const useMediaStore = defineStore("media", () => {
     try {
       const result = await downloadYoutube({
         url: youtubeUrl.value,
-        formatId: selectedFormatId.value,
+        formatId: download.formatId,
         outputPath,
         startSecs: startSecs.value,
         endSecs: endSecs.value,
-        videoOnly: selected?.video_only ?? false,
-        audioOnly: selected?.audio_only ?? false,
+        videoOnly: download.videoOnly,
+        audioOnly: download.audioOnly,
+        convertTo: download.convertTo,
+        audioQuality: download.audioQuality,
       });
       lastOutputPath.value = result.output_path;
-      if (!selected?.audio_only) {
+      if (!selected.audio_only) {
         await setPlaybackFromFile(result.output_path);
       }
     } catch (e) {

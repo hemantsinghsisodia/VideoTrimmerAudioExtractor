@@ -62,6 +62,8 @@ pub fn download_with_format(
     end_secs: Option<f64>,
     video_only: bool,
     audio_only: bool,
+    convert_to: Option<&str>,
+    audio_quality: Option<&str>,
 ) -> Result<String, String> {
     let ytdlp = ytdlp_path().ok_or("yt-dlp not found on PATH")?;
 
@@ -133,14 +135,39 @@ pub fn download_with_format(
         ));
     }
 
-    let final_output = normalize_output_path(output_path, audio_only);
+    let convert_mp3 = convert_to == Some("mp3");
+    let final_output = if convert_mp3 {
+        ensure_mp3_extension(output_path)
+    } else {
+        normalize_output_path(output_path, audio_only)
+    };
 
     let needs_trim = match (start_secs, end_secs) {
         (Some(s), Some(e)) if e > s + 0.05 => true,
         _ => false,
     };
 
-    if needs_trim {
+    let needs_audio_processing = convert_mp3 || (needs_trim && audio_only);
+    let needs_video_processing = needs_trim && !audio_only && !convert_mp3;
+
+    if needs_audio_processing {
+        let (s, e) = resolve_audio_range(start_secs, end_secs, &downloaded_path)?;
+        let trim_phase = PhaseProgress {
+            app,
+            start: 68.0,
+            end: 92.0,
+        };
+        ffmpeg::extract_audio(
+            app,
+            &trim_phase,
+            &downloaded_path,
+            &final_output,
+            s,
+            e,
+            if convert_mp3 { audio_quality } else { None },
+        )?;
+        let _ = fs::remove_file(&downloaded_path);
+    } else if needs_video_processing {
         let (s, e) = (start_secs.unwrap(), end_secs.unwrap());
         let trim_phase = PhaseProgress {
             app,
@@ -148,9 +175,7 @@ pub fn download_with_format(
             end: 92.0,
         };
 
-        if audio_only {
-            ffmpeg::extract_audio(app, &trim_phase, &downloaded_path, &final_output, s, e)?;
-        } else if ffmpeg::trim_video(app, &trim_phase, &downloaded_path, &final_output, s, e, false)
+        if ffmpeg::trim_video(app, &trim_phase, &downloaded_path, &final_output, s, e, false)
             .is_err()
         {
             ffmpeg::trim_video(app, &trim_phase, &downloaded_path, &final_output, s, e, true)?;
@@ -220,6 +245,38 @@ fn find_newest_in_dir(dir: &Path, stamp: u128) -> Result<String, String> {
 
     best.map(|(p, _)| p.to_string_lossy().to_string())
         .ok_or_else(|| "Download completed but the file could not be located".to_string())
+}
+
+fn ensure_mp3_extension(output_path: &str) -> String {
+    let path = Path::new(output_path);
+    match path.extension().and_then(|e| e.to_str()) {
+        Some("mp3") => output_path.to_string(),
+        _ => {
+            let mut p = path.to_path_buf();
+            p.set_extension("mp3");
+            p.to_string_lossy().to_string()
+        }
+    }
+}
+
+fn resolve_audio_range(
+    start_secs: Option<f64>,
+    end_secs: Option<f64>,
+    input_path: &str,
+) -> Result<(f64, f64), String> {
+    let probe = ffmpeg::probe_file(input_path)?;
+    let file_dur = probe.duration_secs.max(0.1);
+
+    let (start, end) = match (start_secs, end_secs) {
+        (Some(s), Some(e)) if e > s + 0.05 => {
+            let start = s.clamp(0.0, file_dur);
+            let end = e.clamp(start + 0.05, file_dur);
+            (start, end)
+        }
+        _ => (0.0, file_dur),
+    };
+
+    Ok((start, end))
 }
 
 fn normalize_output_path(output_path: &str, audio_only: bool) -> String {

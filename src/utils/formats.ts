@@ -45,9 +45,59 @@ export function getUserFacingFormats(
     ]);
   }
 
-  return sortFormatsByQuality(
-    dedupeByGroup(filtered).map(withFriendlyLabel),
+  const rawAudio = dedupeByGroup(filtered).map(withFriendlyLabel);
+  const mp3Options = buildMp3ConversionOptions(filtered);
+  return sortFormatsByQuality([...rawAudio, ...mp3Options]);
+}
+
+const MP3_QUALITY_PRESETS = [
+  { quality: "320", label: "320 kbps" },
+  { quality: "v0", label: "V0 (best)" },
+] as const;
+
+function buildMp3ConversionOptions(formats: YoutubeFormat[]): YoutubeFormat[] {
+  const audioSources = dedupeByGroup(
+    formats.filter((f) => f.audio_only && !f.convert_to),
   );
+  const bestSource =
+    audioSources.find((f) => f.ext === "m4a") ??
+    audioSources.find((f) => f.ext === "mp4") ??
+    sortFormatsByQuality(audioSources)[0];
+  if (!bestSource) return [];
+
+  return MP3_QUALITY_PRESETS.map((preset) => ({
+    format_id: `mp3-${preset.quality}@${bestSource.format_id}`,
+    ext: "mp3",
+    audio_only: true,
+    video_only: false,
+    convert_to: "mp3" as const,
+    source_format_id: bestSource.format_id,
+    audio_quality: preset.quality,
+    tbr: bestSource.tbr,
+    label: `Audio · MP3 · ${preset.label}`,
+  }));
+}
+
+export function resolveYoutubeDownloadFormat(selected: YoutubeFormat): {
+  formatId: string;
+  audioOnly: boolean;
+  videoOnly: boolean;
+  convertTo?: YoutubeFormat["convert_to"];
+  audioQuality?: string;
+  defaultExtension: string;
+} {
+  const convertTo = selected.convert_to;
+  const formatId = convertTo ? (selected.source_format_id ?? selected.format_id) : selected.format_id;
+  const defaultExtension = convertTo === "mp3" ? "mp3" : selected.audio_only ? selected.ext : "mp4";
+
+  return {
+    formatId,
+    audioOnly: selected.audio_only,
+    videoOnly: selected.video_only,
+    convertTo,
+    audioQuality: selected.audio_quality,
+    defaultExtension,
+  };
 }
 
 export function pickDefaultFormatId(formats: YoutubeFormat[]): string | null {
@@ -73,6 +123,9 @@ function dedupeByGroup(formats: YoutubeFormat[]): YoutubeFormat[] {
 }
 
 function groupKey(f: YoutubeFormat): string {
+  if (f.convert_to === "mp3") {
+    return `mp3:${f.audio_quality ?? "default"}`;
+  }
   if (f.audio_only) {
     return `audio:${f.ext}`;
   }
@@ -93,6 +146,9 @@ function withFriendlyLabel(f: YoutubeFormat): YoutubeFormat {
 }
 
 function buildFriendlyLabel(f: YoutubeFormat): string {
+  if (f.convert_to === "mp3") {
+    return f.label;
+  }
   if (f.audio_only) {
     const kbps = f.tbr ? `${Math.round(f.tbr)} kbps` : "";
     const parts = ["Audio", f.ext.toUpperCase()];
@@ -115,6 +171,12 @@ function buildFriendlyLabel(f: YoutubeFormat): string {
 
 function qualityScore(f: YoutubeFormat): number {
   let score = 0;
+  if (f.convert_to === "mp3") {
+    score += 5_000;
+    if (f.audio_quality === "v0") score += 350;
+    if (f.audio_quality === "320") score += 320;
+    return score;
+  }
   if (!f.video_only && !f.audio_only) score += 10_000;
   score += getHeight(f) * 10;
   if (f.fps) score += f.fps;

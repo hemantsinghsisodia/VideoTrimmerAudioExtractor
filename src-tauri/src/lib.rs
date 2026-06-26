@@ -144,6 +144,7 @@ async fn extract_audio(
             &output_path,
             start_secs,
             end_secs,
+            None,
         )?;
         Ok(ExportResult {
             output_path,
@@ -164,6 +165,8 @@ async fn download_youtube(
     end_secs: Option<f64>,
     video_only: bool,
     audio_only: bool,
+    convert_to: Option<String>,
+    audio_quality: Option<String>,
 ) -> Result<ExportResult, String> {
     let app2 = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
@@ -178,6 +181,8 @@ async fn download_youtube(
             end_secs,
             video_only,
             audio_only,
+            convert_to.as_deref(),
+            audio_quality.as_deref(),
         )?;
         emit_progress_from(&app2, 100.0, "Complete");
         Ok(ExportResult {

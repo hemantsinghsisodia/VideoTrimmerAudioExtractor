@@ -4,7 +4,7 @@ use crate::progress::{parse_progress_line, PhaseProgress, ProgressKind};
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::mpsc;
+use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 use tauri::{AppHandle, Manager};
 
@@ -171,9 +171,13 @@ pub fn run_command_with_progress(
     let progress_start = progress.start;
     let progress_end = progress.end;
 
+    let stderr_lines: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+    let stderr_for_thread = Arc::clone(&stderr_lines);
+
     thread::spawn(move || {
         let reader = BufReader::new(stderr);
         for line in reader.lines().map_while(Result::ok) {
+            stderr_for_thread.lock().unwrap().push(line.clone());
             if let Some(parsed) = parse_progress_line(kind, &line) {
                 let f = parsed.fraction.clamp(0.0, 1.0);
                 let percent = progress_start + (progress_end - progress_start) * f;
@@ -211,9 +215,14 @@ pub fn run_command_with_progress(
     if status.success() {
         Ok(stdout_str)
     } else {
-        Err(format!(
-            "Command failed with exit code {:?}",
-            status.code()
+        let stderr_str = stderr_lines
+            .lock()
+            .unwrap()
+            .join("\n");
+        Err(format_command_failure(
+            &stderr_str,
+            &stdout_str,
+            status.code(),
         ))
     }
 }

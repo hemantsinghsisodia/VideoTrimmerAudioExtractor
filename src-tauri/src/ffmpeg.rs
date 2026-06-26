@@ -186,10 +186,15 @@ pub fn extract_audio(
     output: &str,
     start_secs: f64,
     end_secs: f64,
+    mp3_quality: Option<&str>,
 ) -> Result<(), String> {
     let ffmpeg = ffmpeg_path().ok_or("ffmpeg not found on PATH")?;
     let duration = (end_secs - start_secs).max(0.1);
     let start = format_secs(start_secs);
+
+    if let Some(parent) = Path::new(output).parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
 
     progress.emit_fraction(0.0, "Extracting audio…");
 
@@ -198,11 +203,27 @@ pub fn extract_audio(
         .and_then(|e| e.to_str())
         .unwrap_or("m4a");
 
-    let (audio_codec, audio_args): (&str, Vec<&str>) = match ext.to_lowercase().as_str() {
-        "mp3" => ("libmp3lame", vec!["-q:a", "0"]),
-        "wav" => ("pcm_s16le", vec![]),
-        "flac" => ("flac", vec![]),
-        _ => ("aac", vec!["-b:a", "320k"]),
+    let mut audio_args: Vec<&str> = Vec::new();
+    let audio_codec = match ext.to_lowercase().as_str() {
+        "mp3" => {
+            audio_args.extend(["-ar", "44100", "-ac", "2"]);
+            match mp3_quality {
+                Some("320") => {
+                    audio_args.extend(["-b:a", "320k"]);
+                    "libmp3lame"
+                }
+                _ => {
+                    audio_args.extend(["-q:a", "0"]);
+                    "libmp3lame"
+                }
+            }
+        }
+        "wav" => "pcm_s16le",
+        "flac" => "flac",
+        _ => {
+            audio_args.extend(["-b:a", "320k"]);
+            "aac"
+        }
     };
 
     let duration_str = format!("{duration:.3}");
@@ -210,19 +231,23 @@ pub fn extract_audio(
         "-y",
         "-hide_banner",
         "-loglevel",
-        "info",
-        "-ss",
-        &start,
+        "warning",
         "-i",
         input,
+        "-ss",
+        &start,
         "-t",
         duration_str.as_str(),
         "-vn",
+        "-map",
+        "0:a:0?",
         "-c:a",
         audio_codec,
     ];
-    for a in &audio_args {
-        args.push(a);
+    args.extend(audio_args);
+    if ext.eq_ignore_ascii_case("mp3") {
+        args.push("-f");
+        args.push("mp3");
     }
     args.push(output);
 

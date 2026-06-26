@@ -4,6 +4,7 @@ import {
   filterFormatsByKind,
   getUserFacingFormats,
   pickDefaultFormatId,
+  resolveYoutubeDownloadFormat,
   sortFormatsByQuality,
 } from "@/utils/formats";
 
@@ -141,6 +142,68 @@ describe("getUserFacingFormats", () => {
     const all = getUserFacingFormats(sampleFormats, "all");
     expect(all.find((f) => f.format_id === "18")?.label).toMatch(/360p.*MP4/i);
     expect(all.find((f) => f.format_id === "140")?.label).toMatch(/Audio.*M4A/i);
+  });
+
+  it("adds high-quality MP3 options to the audio filter", () => {
+    const audioFormats = getUserFacingFormats(
+      [
+        ...sampleFormats,
+        {
+          ...base,
+          format_id: "251",
+          ext: "webm",
+          audio_only: true,
+          video_only: false,
+          label: "raw",
+          tbr: 160,
+          resolution: undefined,
+          fps: undefined,
+        },
+      ],
+      "audio",
+    );
+
+    const mp3Options = audioFormats.filter((f) => f.convert_to === "mp3");
+    expect(mp3Options.length).toBeGreaterThanOrEqual(2);
+    expect(mp3Options.some((f) => f.label.includes("MP3") && f.label.includes("320"))).toBe(true);
+    expect(mp3Options.some((f) => f.label.includes("MP3") && f.label.includes("V0"))).toBe(true);
+    expect(mp3Options.every((f) => f.source_format_id === "140")).toBe(true);
+    expect(mp3Options.every((f) => f.ext === "mp3")).toBe(true);
+  });
+
+  it("does not add MP3 options to video or recommended filters", () => {
+    const video = getUserFacingFormats(sampleFormats, "video");
+    const all = getUserFacingFormats(sampleFormats, "all");
+    expect(video.some((f) => f.convert_to === "mp3")).toBe(false);
+    expect(all.some((f) => f.convert_to === "mp3")).toBe(false);
+  });
+});
+
+describe("resolveYoutubeDownloadFormat", () => {
+  it("maps MP3 conversion options to source format and mp3 extension", () => {
+    const mp3Option: YoutubeFormat = {
+      ...base,
+      format_id: "mp3-320@140",
+      ext: "mp3",
+      audio_only: true,
+      video_only: false,
+      label: "Audio · MP3 · 320 kbps",
+      convert_to: "mp3",
+      source_format_id: "140",
+      audio_quality: "320",
+      tbr: 128,
+      resolution: undefined,
+      fps: undefined,
+    };
+
+    expect(resolveYoutubeDownloadFormat(mp3Option)).toEqual({
+      formatId: "140",
+      audioOnly: true,
+      videoOnly: false,
+      convertTo: "mp3",
+      audioQuality: "320",
+      defaultExtension: "mp3",
+    });
   });
 });
 
