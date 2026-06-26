@@ -68,6 +68,11 @@ export const useMediaStore = defineStore("media", () => {
 
   const isYoutube = computed(() => sourceType.value === "youtube");
   const isLocal = computed(() => sourceType.value === "local");
+  const isLocalAudioOnly = computed(() => {
+    if (!isLocal.value || !probe.value) return false;
+    if (localPath.value && /\.mp3$/i.test(localPath.value)) return true;
+    return !probe.value.width && !probe.value.height;
+  });
   const hasSource = computed(() => !!probe.value || !!youtubeInfo.value);
 
   const thumbnailUrl = computed(() => youtubeInfo.value?.thumbnail ?? null);
@@ -356,6 +361,7 @@ export const useMediaStore = defineStore("media", () => {
     availableFormats,
     isYoutube,
     isLocal,
+    isLocalAudioOnly,
     hasSource,
     init,
     reset,

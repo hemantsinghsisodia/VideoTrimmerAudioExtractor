@@ -13,6 +13,7 @@ const store = useMediaStore();
 
     <template v-if="store.isLocal">
       <button
+        v-if="!store.isLocalAudioOnly"
         class="btn-primary w-full py-1.5 text-sm"
         :disabled="!store.trimValidation.valid || store.exporting"
         @click="store.exportLocalTrimmed()"
@@ -20,11 +21,11 @@ const store = useMediaStore();
         {{ store.exporting ? "Processing…" : "Trimmed video" }}
       </button>
       <button
-        class="btn-secondary w-full py-1.5 text-sm"
+        :class="store.isLocalAudioOnly ? 'btn-primary w-full py-1.5 text-sm' : 'btn-secondary w-full py-1.5 text-sm'"
         :disabled="!store.trimValidation.valid || store.exporting"
         @click="store.exportLocalAudio()"
       >
-        {{ store.exporting ? "Processing…" : "Audio only" }}
+        {{ store.exporting ? "Processing…" : store.isLocalAudioOnly ? "Trimmed audio" : "Audio only" }}
       </button>
     </template>
 

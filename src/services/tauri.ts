@@ -2,7 +2,7 @@ import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { VIDEO_FILE_EXTENSIONS } from "@/utils/videoFiles";
+import { LOCAL_MEDIA_FILE_EXTENSIONS } from "@/utils/videoFiles";
 import type {
   AudioConvertTarget,
   ExportKind,
@@ -45,8 +45,8 @@ export async function pickVideoFile(): Promise<string | null> {
     multiple: false,
     filters: [
       {
-        name: "Video",
-        extensions: [...VIDEO_FILE_EXTENSIONS],
+        name: "Media",
+        extensions: [...LOCAL_MEDIA_FILE_EXTENSIONS],
       },
     ],
   });

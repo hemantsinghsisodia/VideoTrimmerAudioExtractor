@@ -2,7 +2,7 @@
 import { onMounted, onUnmounted, ref } from "vue";
 import { useMediaStore } from "@/stores/mediaStore";
 import { onNativeFileDrop } from "@/services/tauri";
-import { isSupportedVideoPath } from "@/utils/videoFiles";
+import { isSupportedLocalMediaPath } from "@/utils/videoFiles";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 
 const store = useMediaStore();
@@ -13,9 +13,9 @@ const showChangeSource = ref(false);
 let unlistenFileDrop: UnlistenFn | null = null;
 
 function handleDroppedPath(path: string) {
-  if (!isSupportedVideoPath(path)) {
+  if (!isSupportedLocalMediaPath(path)) {
     store.error =
-      "Unsupported file type. Drop a video file (mp4, mkv, webm, mov, avi, etc.) or use Browse.";
+      "Unsupported file type. Drop a video or MP3 audio file (mp4, mkv, webm, mov, mp3, etc.) or use Browse.";
     return;
   }
   void store.loadLocalFile(path);
@@ -143,7 +143,7 @@ onUnmounted(() => {
         @dragover="onDragOver"
         @dragleave="onDragLeave"
       >
-        <p class="text-xs text-slate-300">Drag &amp; drop a video file</p>
+        <p class="text-xs text-slate-300">Drag &amp; drop a video or MP3 audio file</p>
         <button
           class="btn-secondary mt-2 px-3 py-1.5 text-sm"
           :disabled="store.loading"
