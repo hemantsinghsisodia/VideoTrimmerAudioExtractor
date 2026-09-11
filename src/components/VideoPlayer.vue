@@ -54,7 +54,7 @@ function onVideoError() {
 </script>
 
 <template>
-  <div class="min-w-0 overflow-hidden rounded-lg bg-black">
+  <div class="min-w-0 overflow-hidden rounded-2xl ring-1 ring-white/10 shadow-inner">
     <div
       class="flex w-full items-center justify-center bg-black"
       :class="mediaHeightClass"
@@ -86,12 +86,12 @@ function onVideoError() {
       </div>
     </div>
 
-    <p v-if="loadError" class="mt-1 line-clamp-2 text-xs text-red-400">
+    <p v-if="loadError" class="mt-1.5 line-clamp-2 px-0.5 text-xs text-red-300">
       {{ loadError }}
     </p>
     <p
       v-else-if="store.isYoutube && !store.canPlayInPlayer"
-      class="mt-1 line-clamp-2 text-xs text-slate-500"
+      class="mt-1.5 line-clamp-2 px-0.5 text-xs text-slate-400"
     >
       Thumbnail only. Download to preview the trimmed video here.
     </p>
