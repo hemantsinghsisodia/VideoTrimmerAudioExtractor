@@ -53,5 +53,7 @@ pub struct DependencyStatus {
     pub ffmpeg: bool,
     pub ffprobe: bool,
     pub ytdlp: bool,
+    pub ytdlp_version: Option<String>,
+    pub ytdlp_outdated: bool,
     pub messages: Vec<String>,
 }

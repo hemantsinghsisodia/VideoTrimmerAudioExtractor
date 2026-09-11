@@ -6,6 +6,7 @@ import type {
   SourceType,
   YoutubeFormat,
   YoutubeInfo,
+  DependencyStatus,
 } from "@/types/media";
 import {
   cancelJob,
@@ -56,9 +57,7 @@ export const useMediaStore = defineStore("media", () => {
   const progress = ref<JobProgress | null>(null);
   const lastOutputPath = ref<string | null>(null);
 
-  const deps = ref<{ ffmpeg: boolean; ffprobe: boolean; ytdlp: boolean; messages: string[] } | null>(
-    null,
-  );
+  const deps = ref<DependencyStatus | null>(null);
 
   const duration = computed(() => probe.value?.duration_secs ?? youtubeInfo.value?.duration_secs ?? 0);
 

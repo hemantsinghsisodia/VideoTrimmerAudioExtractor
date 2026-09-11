@@ -4,11 +4,14 @@ mod models;
 mod playback;
 mod process_util;
 mod progress;
+mod rate_limit;
 mod ytdlp;
 
 use job_control::JobController;
+use rate_limit::RateLimiter;
 use models::{DependencyStatus, ExportResult, JobProgress, MediaProbe, YoutubeInfo};
 use progress::PhaseProgress;
+use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter, Manager};
 
 pub(crate) fn emit_progress_from(app: &AppHandle, percent: f64, message: &str) {
@@ -32,6 +35,15 @@ fn check_dependencies() -> DependencyStatus {
     let ffmpeg = ffmpeg::ffmpeg_path().is_some();
     let ffprobe = ffmpeg::ffprobe_path().is_some();
     let ytdlp = ytdlp::ytdlp_path().is_some();
+    let ytdlp_version = if ytdlp { ytdlp::version() } else { None };
+    let now_epoch_secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    let ytdlp_outdated = ytdlp_version
+        .as_deref()
+        .map(|ver| ytdlp::is_outdated(ver, now_epoch_secs))
+        .unwrap_or(false);
     let mut messages = Vec::new();
     if !ffmpeg {
         messages.push("Install ffmpeg and add to PATH".into());
@@ -41,11 +53,18 @@ fn check_dependencies() -> DependencyStatus {
     }
     if !ytdlp {
         messages.push("Install yt-dlp: pip install yt-dlp".into());
+    } else if ytdlp_outdated {
+        let ver = ytdlp_version.as_deref().unwrap_or("unknown");
+        messages.push(format!(
+            "yt-dlp {ver} is out of date — run `pip install -U yt-dlp`"
+        ));
     }
     DependencyStatus {
         ffmpeg,
         ffprobe,
         ytdlp,
+        ytdlp_version,
+        ytdlp_outdated,
         messages,
     }
 }
@@ -198,6 +217,7 @@ async fn download_youtube(
 pub fn run() {
     tauri::Builder::default()
         .manage(JobController::default())
+        .manage(RateLimiter::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .invoke_handler(tauri::generate_handler![

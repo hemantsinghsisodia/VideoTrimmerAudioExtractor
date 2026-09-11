@@ -10,6 +10,7 @@ import type {
   JobProgress,
   MediaProbe,
   YoutubeInfo,
+  DependencyStatus,
 } from "@/types/media";
 
 export type NativeFileDropEvent = {
@@ -129,13 +130,8 @@ export async function downloadYoutube(params: YoutubeDownloadParams): Promise<Ex
   });
 }
 
-export async function checkDependencies(): Promise<{
-  ffmpeg: boolean;
-  ffprobe: boolean;
-  ytdlp: boolean;
-  messages: string[];
-}> {
-  return invoke("check_dependencies");
+export async function checkDependencies(): Promise<DependencyStatus> {
+  return invoke<DependencyStatus>("check_dependencies");
 }
 
 export function onJobProgress(callback: (progress: JobProgress) => void): Promise<UnlistenFn> {

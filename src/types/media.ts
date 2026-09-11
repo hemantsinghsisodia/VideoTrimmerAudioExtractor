@@ -57,3 +57,12 @@ export interface ExportResult {
   output_path: string;
   kind: ExportKind;
 }
+
+export interface DependencyStatus {
+  ffmpeg: boolean;
+  ffprobe: boolean;
+  ytdlp: boolean;
+  ytdlp_version?: string | null;
+  ytdlp_outdated: boolean;
+  messages: string[];
+}
