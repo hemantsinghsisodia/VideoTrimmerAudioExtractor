@@ -12,7 +12,11 @@ const duration = computed(() => Math.max(store.duration, 0.001));
 
 const startPercent = computed(() => (store.startSecs / duration.value) * 100);
 const endPercent = computed(() => (store.endSecs / duration.value) * 100);
-const playheadPercent = computed(() => startPercent.value);
+const playheadPercent = computed(() => {
+  if (!store.canPlayInPlayer) return startPercent.value;
+  const t = clamp(store.currentSecs, 0, duration.value);
+  return (t / duration.value) * 100;
+});
 
 function secsFromClientX(clientX: number): number {
   const el = trackRef.value;
@@ -113,7 +117,7 @@ onUnmounted(() => {
         <span class="absolute inset-y-2 left-1/2 w-px -translate-x-1/2 bg-rose-950/40" />
       </div>
       <div
-        class="absolute top-1/2 z-0 h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/80"
+        class="pointer-events-none absolute inset-y-1 z-[5] w-0.5 -translate-x-1/2 rounded-full bg-white shadow-glow"
         :style="{ left: `${playheadPercent}%` }"
       />
     </div>

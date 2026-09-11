@@ -31,6 +31,27 @@ import {
   type FormatFilterKind,
 } from "@/utils/formats";
 import { isCancelledError } from "@/utils/progress";
+import { getDirectory, sanitizeFilename } from "@/utils/filenames";
+
+const LAST_OUTPUT_DIR_KEY = "vtae:lastOutputDir";
+
+function rememberedOutputDir(): string | undefined {
+  try {
+    return localStorage.getItem(LAST_OUTPUT_DIR_KEY) ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function rememberOutputDir(path: string) {
+  const dir = getDirectory(path);
+  if (!dir) return;
+  try {
+    localStorage.setItem(LAST_OUTPUT_DIR_KEY, dir);
+  } catch {
+    // Ignore quota / private-mode failures.
+  }
+}
 
 export const useMediaStore = defineStore("media", () => {
   const sourceType = ref<SourceType | null>(null);
@@ -46,6 +67,8 @@ export const useMediaStore = defineStore("media", () => {
   const endSecs = ref(0);
   const startInput = ref("00:00");
   const endInput = ref("00:00");
+  const currentSecs = ref(0);
+  const preciseCut = ref(false);
 
   const selectedFormatId = ref<string | null>(null);
   const formatFilter = ref<FormatFilterKind>("video");
@@ -148,6 +171,7 @@ export const useMediaStore = defineStore("media", () => {
     endSecs.value = 0;
     startInput.value = "00:00";
     endInput.value = "00:00";
+    currentSecs.value = 0;
     selectedFormatId.value = null;
     formatFilter.value = "video";
     error.value = null;
@@ -202,6 +226,7 @@ export const useMediaStore = defineStore("media", () => {
       endInput.value = formatTime(result.duration_secs);
       startSecs.value = 0;
       startInput.value = "00:00";
+      currentSecs.value = 0;
     } catch (e) {
       error.value = e instanceof Error ? e.message : String(e);
     } finally {
@@ -235,6 +260,7 @@ export const useMediaStore = defineStore("media", () => {
       endInput.value = formatTime(info.duration_secs);
       startSecs.value = 0;
       startInput.value = "00:00";
+      currentSecs.value = 0;
       formatFilter.value = "video";
       selectedFormatId.value = pickDefaultFormatId(info.formats);
       downloadedPath.value = null;
@@ -254,10 +280,20 @@ export const useMediaStore = defineStore("media", () => {
     }
   }
 
+  function defaultExportName(fallback: string, extension: string): string {
+    const title = youtubeInfo.value?.title ?? probe.value?.title ?? fallback;
+    return `${sanitizeFilename(title, fallback)}.${extension}`;
+  }
+
+  async function chooseOutputPath(defaultName: string): Promise<string | null> {
+    const outputPath = await pickSavePath(defaultName, rememberedOutputDir());
+    if (outputPath) rememberOutputDir(outputPath);
+    return outputPath;
+  }
+
   async function exportLocalTrimmed() {
     if (!localPath.value || !applyTrimFromInputs()) return;
-    const defaultName = `trimmed_${Date.now()}.mp4`;
-    const outputPath = await pickSavePath(defaultName);
+    const outputPath = await chooseOutputPath(defaultExportName("trimmed", "mp4"));
     if (!outputPath) return;
 
     exporting.value = true;
@@ -269,7 +305,7 @@ export const useMediaStore = defineStore("media", () => {
         outputPath,
         startSecs.value,
         endSecs.value,
-        false,
+        preciseCut.value,
       );
       lastOutputPath.value = result.output_path;
       await setPlaybackFromFile(result.output_path);
@@ -283,8 +319,7 @@ export const useMediaStore = defineStore("media", () => {
 
   async function exportLocalAudio() {
     if (!localPath.value || !applyTrimFromInputs()) return;
-    const defaultName = `audio_${Date.now()}.m4a`;
-    const outputPath = await pickSavePath(defaultName);
+    const outputPath = await chooseOutputPath(defaultExportName("audio", "m4a"));
     if (!outputPath) return;
 
     exporting.value = true;
@@ -314,8 +349,9 @@ export const useMediaStore = defineStore("media", () => {
     if (!selected) return;
 
     const download = resolveYoutubeDownloadFormat(selected);
-    const defaultName = `youtube_${Date.now()}.${download.defaultExtension}`;
-    const outputPath = await pickSavePath(defaultName);
+    const outputPath = await chooseOutputPath(
+      defaultExportName("youtube", download.defaultExtension),
+    );
     if (!outputPath) return;
 
     exporting.value = true;
@@ -332,6 +368,7 @@ export const useMediaStore = defineStore("media", () => {
         audioOnly: download.audioOnly,
         convertTo: download.convertTo,
         audioQuality: download.audioQuality,
+        preciseCut: preciseCut.value,
       });
       lastOutputPath.value = result.output_path;
       if (!selected.audio_only) {
@@ -361,6 +398,8 @@ export const useMediaStore = defineStore("media", () => {
     endSecs,
     startInput,
     endInput,
+    currentSecs,
+    preciseCut,
     selectedFormatId,
     formatFilter,
     loading,

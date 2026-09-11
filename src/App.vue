@@ -7,6 +7,7 @@ import TrimTimeline from "@/components/TrimTimeline.vue";
 import TrimInputs from "@/components/TrimInputs.vue";
 import ExportPanel from "@/components/ExportPanel.vue";
 import DependencyBanner from "@/components/DependencyBanner.vue";
+import { revealInFolder } from "@/services/tauri";
 
 const store = useMediaStore();
 
@@ -20,6 +21,15 @@ const ringOffset = computed(() => {
 onMounted(() => {
   store.init();
 });
+
+async function showInFolder() {
+  if (!store.lastOutputPath) return;
+  try {
+    await revealInFolder(store.lastOutputPath);
+  } catch (e) {
+    store.error = e instanceof Error ? e.message : String(e);
+  }
+}
 </script>
 
 <template>
@@ -101,7 +111,7 @@ onMounted(() => {
         </p>
         <p
           v-if="store.lastOutputPath"
-          class="status-pill line-clamp-2 break-all border-emerald-400/30 bg-emerald-950/40 text-emerald-200"
+          class="status-pill break-all border-emerald-400/30 bg-emerald-950/40 text-emerald-200"
           :title="store.lastOutputPath"
         >
           <svg class="mt-0.5 h-3.5 w-3.5 shrink-0" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -113,12 +123,19 @@ onMounted(() => {
               stroke-linejoin="round"
             />
           </svg>
-          <span>
+          <span class="min-w-0 flex-1">
             Saved to: {{ store.lastOutputPath }}
             <span v-if="store.downloadedPath" class="block text-emerald-300/80">
               Playing from app cache.
             </span>
           </span>
+          <button
+            type="button"
+            class="btn-ghost shrink-0 whitespace-nowrap text-emerald-100"
+            @click="showInFolder"
+          >
+            Show in folder
+          </button>
         </p>
       </div>
     </div>

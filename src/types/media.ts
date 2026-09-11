@@ -14,6 +14,7 @@ export type AudioConvertTarget = "mp3";
 export interface YoutubeFormat {
   format_id: string;
   ext: string;
+  protocol?: string;
   resolution?: string;
   fps?: number;
   vcodec?: string;

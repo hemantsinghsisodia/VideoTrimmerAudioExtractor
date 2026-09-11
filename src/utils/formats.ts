@@ -41,6 +41,7 @@ const MP3_QUALITY_PRESETS = [
 
 function isRealVideo(f: YoutubeFormat): boolean {
   if (f.convert_to || f.audio_only) return false;
+  if (!isReliableDownloadFormat(f)) return false;
   const ext = (f.ext ?? "").toLowerCase();
   return ext !== "mhtml" && ext !== "none" && ext !== "unknown";
 }
@@ -48,8 +49,15 @@ function isRealVideo(f: YoutubeFormat): boolean {
 function hasUsableAudio(f: YoutubeFormat): boolean {
   if (f.convert_to === "mp3") return true;
   if (!f.audio_only || f.video_only) return false;
+  if (!isReliableDownloadFormat(f)) return false;
   const ext = (f.ext ?? "").toLowerCase();
   return ext !== "mhtml" && ext !== "none" && ext !== "unknown";
+}
+
+function isReliableDownloadFormat(f: YoutubeFormat): boolean {
+  const protocol = (f.protocol ?? "").toLowerCase();
+  const note = (f.format_note ?? "").toLowerCase();
+  return !protocol.startsWith("m3u8") && !note.includes("untested");
 }
 
 function buildMp3ConversionOptions(formats: YoutubeFormat[]): YoutubeFormat[] {

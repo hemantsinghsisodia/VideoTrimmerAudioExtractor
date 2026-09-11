@@ -55,9 +55,12 @@ export async function pickVideoFile(): Promise<string | null> {
   return selected;
 }
 
-export async function pickSavePath(defaultName: string): Promise<string | null> {
+export async function pickSavePath(defaultName: string, defaultDir?: string): Promise<string | null> {
+  const defaultPath = defaultDir
+    ? `${defaultDir.replace(/[\\/]+$/, "")}${defaultDir.includes("\\") ? "\\" : "/"}${defaultName}`
+    : defaultName;
   const path = await save({
-    defaultPath: defaultName,
+    defaultPath,
   });
   return path;
 }
@@ -114,6 +117,7 @@ export interface YoutubeDownloadParams {
   audioOnly: boolean;
   convertTo?: AudioConvertTarget;
   audioQuality?: string;
+  preciseCut?: boolean;
 }
 
 export async function downloadYoutube(params: YoutubeDownloadParams): Promise<ExportResult> {
@@ -127,6 +131,7 @@ export async function downloadYoutube(params: YoutubeDownloadParams): Promise<Ex
     audioOnly: params.audioOnly,
     convertTo: params.convertTo ?? null,
     audioQuality: params.audioQuality ?? null,
+    preciseCut: params.preciseCut ?? false,
   });
 }
 
@@ -150,6 +155,10 @@ export function videoSrcFromPath(path: string): string {
 
 export async function stageForPlayback(sourcePath: string): Promise<string> {
   return invoke<string>("stage_for_playback", { sourcePath });
+}
+
+export async function revealInFolder(path: string): Promise<void> {
+  await invoke("reveal_in_folder", { path });
 }
 
 export type { ExportKind };

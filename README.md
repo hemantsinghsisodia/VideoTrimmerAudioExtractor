@@ -21,7 +21,7 @@ Windows quick install:
 
 ```powershell
 winget install Gyan.FFmpeg
-pip install yt-dlp
+winget install yt-dlp.yt-dlp
 ```
 
 Install Rust:

@@ -140,6 +140,39 @@ describe("filterFormatsByKind", () => {
     expect(video.some((f) => f.ext === "mhtml")).toBe(false);
     expect(video.some((f) => f.format_id === "313")).toBe(true);
   });
+
+  it("excludes untested HLS formats that yt-dlp may list but cannot download", () => {
+    const unreliable: YoutubeFormat[] = [
+      {
+        ...base,
+        format_id: "625",
+        ext: "mp4",
+        resolution: "3840x2160",
+        audio_only: false,
+        video_only: true,
+        label: "raw",
+        tbr: 18_724,
+        fps: 24,
+        protocol: "m3u8_native",
+        format_note: "Untested",
+      },
+      {
+        ...base,
+        format_id: "401",
+        ext: "mp4",
+        resolution: "3840x2160",
+        audio_only: false,
+        video_only: true,
+        label: "raw",
+        tbr: 3_740,
+        fps: 24,
+        protocol: "https",
+      },
+    ];
+
+    const video = getUserFacingFormats(unreliable, "video");
+    expect(video.map((f) => f.format_id)).toEqual(["401"]);
+  });
 });
 
 describe("sortFormatsByQuality", () => {

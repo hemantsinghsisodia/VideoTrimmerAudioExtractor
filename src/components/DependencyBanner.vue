@@ -37,7 +37,7 @@ const outdatedVersion = computed(() => store.deps?.ytdlp_version ?? "unknown");
         <p class="mt-1 text-[10px] text-amber-200/80">
           Install FFmpeg and yt-dlp, then restart the app. On Windows:
           <code class="rounded bg-black/30 px-1">winget install Gyan.FFmpeg</code> and
-          <code class="rounded bg-black/30 px-1">pip install yt-dlp</code>
+          <code class="rounded bg-black/30 px-1">winget install yt-dlp.yt-dlp</code>
         </p>
       </div>
     </div>
@@ -58,7 +58,7 @@ const outdatedVersion = computed(() => store.deps?.ytdlp_version ?? "unknown");
         <p class="font-medium">yt-dlp {{ outdatedVersion }} is out of date</p>
         <p class="mt-1 text-[10px] text-amber-200/80">
           Update to reduce YouTube 403s:
-          <code class="rounded bg-black/30 px-1">pip install -U yt-dlp</code>
+          <code class="rounded bg-black/30 px-1">winget upgrade yt-dlp.yt-dlp</code>
         </p>
       </div>
     </div>

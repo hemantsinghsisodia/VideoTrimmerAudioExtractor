@@ -1,8 +1,15 @@
 <script setup lang="ts">
+import { computed } from "vue";
 import { useMediaStore } from "@/stores/mediaStore";
 import ProgressBar from "@/components/ProgressBar.vue";
 
 const store = useMediaStore();
+
+const showPreciseCut = computed(() => {
+  if (store.isLocal) return !store.isLocalAudioOnly;
+  if (store.isYoutube) return store.formatFilter === "video";
+  return false;
+});
 </script>
 
 <template>
@@ -121,5 +128,18 @@ const store = useMediaStore();
         {{ store.exporting ? "Processing…" : "Download (trimmed)" }}
       </button>
     </template>
+
+    <label
+      v-if="showPreciseCut"
+      class="flex cursor-pointer items-start gap-2 text-xs text-slate-300"
+    >
+      <input
+        v-model="store.preciseCut"
+        type="checkbox"
+        class="mt-0.5 h-3.5 w-3.5 accent-brand-500"
+        :disabled="store.exporting"
+      />
+      <span>Precise cut (slower, re-encodes)</span>
+    </label>
   </div>
 </template>

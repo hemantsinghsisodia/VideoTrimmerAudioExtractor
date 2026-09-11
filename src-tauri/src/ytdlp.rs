@@ -125,6 +125,7 @@ pub fn download_with_format(
     audio_only: bool,
     convert_to: Option<&str>,
     audio_quality: Option<&str>,
+    precise_cut: bool,
 ) -> Result<String, String> {
     crate::rate_limit::wait_until_allowed(app)?;
     let ytdlp = ytdlp_path().ok_or("yt-dlp not found on PATH")?;
@@ -245,7 +246,9 @@ pub fn download_with_format(
             end: 92.0,
         };
 
-        if ffmpeg::trim_video(app, &trim_phase, &downloaded_path, &final_output, s, e, false)
+        if precise_cut {
+            ffmpeg::trim_video(app, &trim_phase, &downloaded_path, &final_output, s, e, true)?;
+        } else if ffmpeg::trim_video(app, &trim_phase, &downloaded_path, &final_output, s, e, false)
             .is_err()
         {
             ffmpeg::trim_video(app, &trim_phase, &downloaded_path, &final_output, s, e, true)?;
@@ -582,6 +585,7 @@ fn parse_youtube_json(json_str: &str) -> Result<YoutubeInfo, String> {
                 None => continue,
             };
             let ext = f["ext"].as_str().unwrap_or("unknown").to_string();
+            let protocol = f["protocol"].as_str().map(String::from);
             let vcodec = f["vcodec"].as_str().map(String::from);
             let acodec = f["acodec"].as_str().map(String::from);
             let audio_only = vcodec.as_deref() == Some("none");
@@ -608,6 +612,7 @@ fn parse_youtube_json(json_str: &str) -> Result<YoutubeInfo, String> {
             formats.push(YoutubeFormat {
                 format_id,
                 ext,
+                protocol,
                 resolution,
                 fps,
                 vcodec,
@@ -669,6 +674,27 @@ fn build_format_label(
 mod tests {
     use super::*;
     use std::time::Duration;
+
+    #[test]
+    fn parses_format_protocol_for_frontend_reliability_filtering() {
+        let info = parse_youtube_json(
+            r#"{
+                "id": "abc",
+                "title": "Example",
+                "duration": 10,
+                "formats": [{
+                    "format_id": "625",
+                    "ext": "mp4",
+                    "protocol": "m3u8_native",
+                    "vcodec": "vp9",
+                    "acodec": "none"
+                }]
+            }"#,
+        )
+        .unwrap();
+
+        assert_eq!(info.formats[0].protocol.as_deref(), Some("m3u8_native"));
+    }
 
     #[test]
     fn cache_key_is_stable_and_differs_by_url() {

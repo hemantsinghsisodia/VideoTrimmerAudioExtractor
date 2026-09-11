@@ -36,15 +36,18 @@ watch(
 function onTimeUpdate() {
   if (!videoRef.value) return;
   const t = videoRef.value.currentTime;
+  store.currentSecs = t;
   if (t > store.endSecs) {
     videoRef.value.pause();
     videoRef.value.currentTime = store.startSecs;
+    store.currentSecs = store.startSecs;
   }
 }
 
 function onLoadedMetadata() {
   if (!videoRef.value) return;
   videoRef.value.currentTime = store.startSecs;
+  store.currentSecs = store.startSecs;
 }
 
 function onVideoError() {

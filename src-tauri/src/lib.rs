@@ -11,6 +11,8 @@ use job_control::JobController;
 use rate_limit::RateLimiter;
 use models::{DependencyStatus, ExportResult, JobProgress, MediaProbe, YoutubeInfo};
 use progress::PhaseProgress;
+use std::path::Path;
+use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -52,11 +54,11 @@ fn check_dependencies() -> DependencyStatus {
         messages.push("Install ffprobe (included with ffmpeg)".into());
     }
     if !ytdlp {
-        messages.push("Install yt-dlp: pip install yt-dlp".into());
+        messages.push("Install yt-dlp: winget install yt-dlp.yt-dlp".into());
     } else if ytdlp_outdated {
         let ver = ytdlp_version.as_deref().unwrap_or("unknown");
         messages.push(format!(
-            "yt-dlp {ver} is out of date — run `pip install -U yt-dlp`"
+            "yt-dlp {ver} is out of date — run `winget upgrade yt-dlp.yt-dlp`"
         ));
     }
     DependencyStatus {
@@ -66,6 +68,44 @@ fn check_dependencies() -> DependencyStatus {
         ytdlp_version,
         ytdlp_outdated,
         messages,
+    }
+}
+
+#[tauri::command]
+fn reveal_in_folder(path: String) -> Result<(), String> {
+    let target = Path::new(&path);
+    if !target.exists() {
+        return Err(format!("File not found: {path}"));
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        Command::new("explorer")
+            .arg(format!("/select,{path}"))
+            .spawn()
+            .map_err(|e| format!("Failed to open folder: {e}"))?;
+        return Ok(());
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("open")
+            .args(["-R", &path])
+            .spawn()
+            .map_err(|e| format!("Failed to open folder: {e}"))?;
+        return Ok(());
+    }
+
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    {
+        let parent = target
+            .parent()
+            .ok_or_else(|| "Could not resolve parent folder".to_string())?;
+        Command::new("xdg-open")
+            .arg(parent)
+            .spawn()
+            .map_err(|e| format!("Failed to open folder: {e}"))?;
+        Ok(())
     }
 }
 
@@ -186,6 +226,7 @@ async fn download_youtube(
     audio_only: bool,
     convert_to: Option<String>,
     audio_quality: Option<String>,
+    precise_cut: bool,
 ) -> Result<ExportResult, String> {
     let app2 = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
@@ -202,6 +243,7 @@ async fn download_youtube(
             audio_only,
             convert_to.as_deref(),
             audio_quality.as_deref(),
+            precise_cut,
         )?;
         emit_progress_from(&app2, 100.0, "Complete");
         Ok(ExportResult {
@@ -230,6 +272,7 @@ pub fn run() {
             trim_video,
             extract_audio,
             download_youtube,
+            reveal_in_folder,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

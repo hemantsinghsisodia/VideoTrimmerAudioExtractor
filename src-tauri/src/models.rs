@@ -14,6 +14,7 @@ pub struct MediaProbe {
 pub struct YoutubeFormat {
     pub format_id: String,
     pub ext: String,
+    pub protocol: Option<String>,
     pub resolution: Option<String>,
     pub fps: Option<f64>,
     pub vcodec: Option<String>,
