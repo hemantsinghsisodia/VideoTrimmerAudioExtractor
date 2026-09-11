@@ -33,17 +33,9 @@ const store = useMediaStore();
       <div class="flex flex-wrap gap-1 text-[10px]">
         <button
           class="rounded px-2 py-0.5"
-          :class="store.formatFilter === 'all' ? 'bg-accent text-white' : 'bg-slate-700'"
-          :disabled="store.exporting"
-          @click="store.formatFilter = 'all'"
-        >
-          Recommended
-        </button>
-        <button
-          class="rounded px-2 py-0.5"
           :class="store.formatFilter === 'video' ? 'bg-accent text-white' : 'bg-slate-700'"
           :disabled="store.exporting"
-          @click="store.formatFilter = 'video'"
+          @click="store.setFormatFilter('video')"
         >
           Video
         </button>
@@ -51,7 +43,7 @@ const store = useMediaStore();
           class="rounded px-2 py-0.5"
           :class="store.formatFilter === 'audio' ? 'bg-accent text-white' : 'bg-slate-700'"
           :disabled="store.exporting"
-          @click="store.formatFilter = 'audio'"
+          @click="store.setFormatFilter('audio')"
         >
           Audio
         </button>

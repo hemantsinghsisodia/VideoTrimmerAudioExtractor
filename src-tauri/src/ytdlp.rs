@@ -204,6 +204,7 @@ fn build_format_spec(format_id: &str, video_only: bool, audio_only: bool) -> Str
     if audio_only {
         format_id.to_string()
     } else if video_only {
+        // YouTube 1080p+ is usually video-only; merge with the best audio track.
         format!("{format_id}+bestaudio/best")
     } else {
         format_id.to_string()

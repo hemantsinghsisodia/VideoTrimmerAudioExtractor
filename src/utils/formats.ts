@@ -1,6 +1,6 @@
 import type { YoutubeFormat } from "@/types/media";
 
-export type FormatFilterKind = "all" | "video" | "audio";
+export type FormatFilterKind = "video" | "audio";
 
 export function filterFormatsByKind(
   formats: YoutubeFormat[],
@@ -8,11 +8,9 @@ export function filterFormatsByKind(
 ): YoutubeFormat[] {
   switch (kind) {
     case "video":
-      return formats.filter((f) => !f.audio_only);
+      return formats.filter((f) => isRealVideo(f));
     case "audio":
-      return formats.filter((f) => f.audio_only);
-    default:
-      return formats;
+      return formats.filter((f) => hasUsableAudio(f));
   }
 }
 
@@ -27,25 +25,11 @@ export function getUserFacingFormats(
 ): YoutubeFormat[] {
   const filtered = filterFormatsByKind(formats, kind);
 
-  if (kind === "all") {
-    const combined = dedupeByGroup(filtered.filter((f) => !f.audio_only && !f.video_only));
-    const audio = dedupeByGroup(filtered.filter((f) => f.audio_only)).slice(0, 3);
-    return sortFormatsByQuality([
-      ...combined.map(withFriendlyLabel),
-      ...audio.map(withFriendlyLabel),
-    ]);
-  }
-
   if (kind === "video") {
-    const combined = dedupeByGroup(filtered.filter((f) => !f.video_only));
-    const videoOnly = dedupeByGroup(filtered.filter((f) => f.video_only));
-    return sortFormatsByQuality([
-      ...combined.map(withFriendlyLabel),
-      ...videoOnly.map(withFriendlyLabel),
-    ]);
+    return sortFormatsByQuality(dedupeByGroup(filtered).map(withFriendlyLabel));
   }
 
-  const rawAudio = dedupeByGroup(filtered).map(withFriendlyLabel);
+  const rawAudio = dedupeByGroup(filtered.filter((f) => !f.convert_to)).map(withFriendlyLabel);
   const mp3Options = buildMp3ConversionOptions(filtered);
   return sortFormatsByQuality([...rawAudio, ...mp3Options]);
 }
@@ -55,9 +39,22 @@ const MP3_QUALITY_PRESETS = [
   { quality: "v0", label: "V0 (best)" },
 ] as const;
 
+function isRealVideo(f: YoutubeFormat): boolean {
+  if (f.convert_to || f.audio_only) return false;
+  const ext = (f.ext ?? "").toLowerCase();
+  return ext !== "mhtml" && ext !== "none" && ext !== "unknown";
+}
+
+function hasUsableAudio(f: YoutubeFormat): boolean {
+  if (f.convert_to === "mp3") return true;
+  if (!f.audio_only || f.video_only) return false;
+  const ext = (f.ext ?? "").toLowerCase();
+  return ext !== "mhtml" && ext !== "none" && ext !== "unknown";
+}
+
 function buildMp3ConversionOptions(formats: YoutubeFormat[]): YoutubeFormat[] {
   const audioSources = dedupeByGroup(
-    formats.filter((f) => f.audio_only && !f.convert_to),
+    formats.filter((f) => hasUsableAudio(f) && !f.convert_to),
   );
   const bestSource =
     audioSources.find((f) => f.ext === "m4a") ??
@@ -101,13 +98,8 @@ export function resolveYoutubeDownloadFormat(selected: YoutubeFormat): {
 }
 
 export function pickDefaultFormatId(formats: YoutubeFormat[]): string | null {
-  const recommended = getUserFacingFormats(formats, "all");
-  const pick =
-    recommended.find((f) => f.format_id === "18") ??
-    recommended.find((f) => f.format_id === "22") ??
-    recommended.find((f) => !f.audio_only && !f.video_only) ??
-    recommended[0];
-  return pick?.format_id ?? null;
+  const video = getUserFacingFormats(formats, "video");
+  return video[0]?.format_id ?? null;
 }
 
 function dedupeByGroup(formats: YoutubeFormat[]): YoutubeFormat[] {
@@ -131,8 +123,7 @@ function groupKey(f: YoutubeFormat): string {
   }
   const height = getHeight(f);
   const fps = f.fps ? Math.round(f.fps) : 0;
-  const kind = f.video_only ? "video_only" : "combined";
-  return `${kind}:${f.ext}:${height}:${fps}`;
+  return `video:${height}:${fps}`;
 }
 
 function getHeight(f: YoutubeFormat): number {
@@ -158,15 +149,9 @@ function buildFriendlyLabel(f: YoutubeFormat): string {
 
   const height = getHeight(f);
   const resLabel = height > 0 ? `${height}p` : "Video";
-  const fps =
-    f.fps && f.fps >= 50 ? `${Math.round(f.fps)}fps` : f.fps ? `${Math.round(f.fps)}fps` : "";
-  const quality = fps && !resLabel.includes("fps") ? `${resLabel}${fps}` : resLabel;
-  const ext = f.ext.toUpperCase();
-
-  if (f.video_only) {
-    return `${quality} ${ext} (video only)`;
-  }
-  return `${quality} ${ext}`;
+  const fps = f.fps ? `${Math.round(f.fps)}fps` : "";
+  const quality = fps ? `${resLabel}${fps}` : resLabel;
+  return `${quality} ${f.ext.toUpperCase()}`;
 }
 
 function qualityScore(f: YoutubeFormat): number {
@@ -177,7 +162,6 @@ function qualityScore(f: YoutubeFormat): number {
     if (f.audio_quality === "320") score += 320;
     return score;
   }
-  if (!f.video_only && !f.audio_only) score += 10_000;
   score += getHeight(f) * 10;
   if (f.fps) score += f.fps;
   if (f.tbr) score += f.tbr;

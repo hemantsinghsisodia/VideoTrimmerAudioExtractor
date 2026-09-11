@@ -23,7 +23,12 @@ import {
 } from "@/services/tauri";
 import { validateTrimRange, formatTime, parseTimeInput } from "@/utils/time";
 import { validateYoutubeUrl } from "@/utils/youtube";
-import { getUserFacingFormats, pickDefaultFormatId, resolveYoutubeDownloadFormat } from "@/utils/formats";
+import {
+  getUserFacingFormats,
+  pickDefaultFormatId,
+  resolveYoutubeDownloadFormat,
+  type FormatFilterKind,
+} from "@/utils/formats";
 import { isCancelledError } from "@/utils/progress";
 
 export const useMediaStore = defineStore("media", () => {
@@ -42,7 +47,7 @@ export const useMediaStore = defineStore("media", () => {
   const endInput = ref("00:00");
 
   const selectedFormatId = ref<string | null>(null);
-  const formatFilter = ref<"all" | "video" | "audio">("all");
+  const formatFilter = ref<FormatFilterKind>("video");
 
   const loading = ref(false);
   const exporting = ref(false);
@@ -145,6 +150,7 @@ export const useMediaStore = defineStore("media", () => {
     startInput.value = "00:00";
     endInput.value = "00:00";
     selectedFormatId.value = null;
+    formatFilter.value = "video";
     error.value = null;
     progress.value = null;
     lastOutputPath.value = null;
@@ -230,6 +236,7 @@ export const useMediaStore = defineStore("media", () => {
       endInput.value = formatTime(info.duration_secs);
       startSecs.value = 0;
       startInput.value = "00:00";
+      formatFilter.value = "video";
       selectedFormatId.value = pickDefaultFormatId(info.formats);
       downloadedPath.value = null;
     } catch (e) {
@@ -237,6 +244,14 @@ export const useMediaStore = defineStore("media", () => {
     } finally {
       loading.value = false;
       if (!exporting.value) scheduleClearProgress();
+    }
+  }
+
+  function setFormatFilter(kind: FormatFilterKind) {
+    formatFilter.value = kind;
+    const available = availableFormats.value;
+    if (!available.some((f) => f.format_id === selectedFormatId.value)) {
+      selectedFormatId.value = available[0]?.format_id ?? null;
     }
   }
 
@@ -370,6 +385,7 @@ export const useMediaStore = defineStore("media", () => {
     setTrimFromTimeline,
     loadLocalFile,
     loadYoutube,
+    setFormatFilter,
     exportLocalTrimmed,
     exportLocalAudio,
     exportYoutube,

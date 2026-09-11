@@ -99,21 +99,51 @@ const duplicate300Formats: YoutubeFormat[] = [
   },
 ];
 
+const mixedFormats: YoutubeFormat[] = [
+  ...sampleFormats,
+  {
+    ...base,
+    format_id: "313",
+    ext: "webm",
+    resolution: "3840x2160",
+    audio_only: false,
+    video_only: true,
+    label: "raw",
+    tbr: 15000,
+    fps: 30,
+  },
+  {
+    ...base,
+    format_id: "sb0",
+    ext: "mhtml",
+    audio_only: true,
+    video_only: true,
+    label: "raw",
+    tbr: undefined,
+    resolution: undefined,
+    fps: undefined,
+    vcodec: "none",
+    acodec: "none",
+  },
+];
+
 describe("filterFormatsByKind", () => {
-  it("filters audio only", () => {
-    const audio = filterFormatsByKind(sampleFormats, "audio");
+  it("filters real audio only", () => {
+    const audio = filterFormatsByKind(mixedFormats, "audio");
     expect(audio).toHaveLength(1);
     expect(audio[0].format_id).toBe("140");
   });
 
-  it("filters video (non audio-only)", () => {
-    const video = filterFormatsByKind(sampleFormats, "video");
+  it("filters video and excludes audio and storyboards", () => {
+    const video = filterFormatsByKind(mixedFormats, "video");
     expect(video.every((f) => !f.audio_only)).toBe(true);
+    expect(video.some((f) => f.ext === "mhtml")).toBe(false);
+    expect(video.some((f) => f.format_id === "313")).toBe(true);
   });
 });
 
 describe("sortFormatsByQuality", () => {
-  it("sorts higher quality first", () => {
+  it("sorts higher resolution first", () => {
     const sorted = sortFormatsByQuality(sampleFormats);
     expect(sorted[0].format_id).toBe("137");
   });
@@ -128,20 +158,20 @@ describe("getUserFacingFormats", () => {
     expect(sevenTwenty[0].label).toContain("720p");
   });
 
-  it("includes combined and audio in recommended list", () => {
-    const all = getUserFacingFormats(
-      [...duplicate300Formats, ...sampleFormats.filter((f) => f.format_id === "140")],
-      "all",
-    );
-    expect(all.some((f) => f.format_id === "18")).toBe(true);
-    expect(all.some((f) => f.audio_only)).toBe(true);
-    expect(all.filter((f) => f.label.includes("720")).length).toBeLessThanOrEqual(1);
+  it("lists video options without audio or video-only labels", () => {
+    const video = getUserFacingFormats(mixedFormats, "video");
+    expect(video.some((f) => f.audio_only)).toBe(false);
+    expect(video.some((f) => f.format_id === "313")).toBe(true);
+    expect(video.find((f) => f.format_id === "313")?.label).toMatch(/2160p.*WEBM/i);
+    expect(video.every((f) => !f.label.includes("video only"))).toBe(true);
+    expect(video.find((f) => f.format_id === "137")?.video_only).toBe(true);
   });
 
-  it("uses friendly labels instead of raw format ids", () => {
-    const all = getUserFacingFormats(sampleFormats, "all");
-    expect(all.find((f) => f.format_id === "18")?.label).toMatch(/360p.*MP4/i);
-    expect(all.find((f) => f.format_id === "140")?.label).toMatch(/Audio.*M4A/i);
+  it("uses friendly labels for video and audio tabs", () => {
+    const video = getUserFacingFormats(sampleFormats, "video");
+    const audio = getUserFacingFormats(sampleFormats, "audio");
+    expect(video.find((f) => f.format_id === "18")?.label).toMatch(/360p.*MP4/i);
+    expect(audio.find((f) => f.format_id === "140")?.label).toMatch(/Audio.*M4A/i);
   });
 
   it("adds high-quality MP3 options to the audio filter", () => {
@@ -171,11 +201,15 @@ describe("getUserFacingFormats", () => {
     expect(mp3Options.every((f) => f.ext === "mp3")).toBe(true);
   });
 
-  it("does not add MP3 options to video or recommended filters", () => {
+  it("does not add MP3 options to the video filter", () => {
     const video = getUserFacingFormats(sampleFormats, "video");
-    const all = getUserFacingFormats(sampleFormats, "all");
     expect(video.some((f) => f.convert_to === "mp3")).toBe(false);
-    expect(all.some((f) => f.convert_to === "mp3")).toBe(false);
+  });
+
+  it("excludes MHTML from the audio list", () => {
+    const audio = getUserFacingFormats(mixedFormats, "audio");
+    expect(audio.some((f) => f.ext === "mhtml")).toBe(false);
+    expect(audio.some((f) => f.format_id === "140")).toBe(true);
   });
 });
 
@@ -205,10 +239,22 @@ describe("resolveYoutubeDownloadFormat", () => {
       defaultExtension: "mp3",
     });
   });
+
+  it("keeps video-only streams marked so download can merge best audio", () => {
+    const video = getUserFacingFormats(mixedFormats, "video");
+    const fourK = video.find((f) => f.format_id === "313");
+    expect(fourK).toBeDefined();
+    expect(resolveYoutubeDownloadFormat(fourK!)).toMatchObject({
+      formatId: "313",
+      audioOnly: false,
+      videoOnly: true,
+      defaultExtension: "mp4",
+    });
+  });
 });
 
 describe("pickDefaultFormatId", () => {
-  it("prefers combined format 18", () => {
-    expect(pickDefaultFormatId(duplicate300Formats)).toBe("18");
+  it("defaults to the highest quality video option", () => {
+    expect(pickDefaultFormatId(mixedFormats)).toBe("313");
   });
 });
